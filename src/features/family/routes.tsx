@@ -1,14 +1,18 @@
 import { Hono } from 'hono';
 import { raw } from 'hono/html';
+import { eq } from 'drizzle-orm';
+import { settings } from '../../db/schema.js';
+import { Icon } from '../../web/components/Icon.js';
+import { splitSopSections } from '../../web/protocolSections.js';
 import type { AppDeps } from '../../app.js';
 import { requestClock } from '../clock.js';
 import { LocationCard } from '../../web/components/LocationCard.js';
 import { WarningBadge } from '../../web/components/WarningBadge.js';
-import { renderMarkdown, safeHref } from '../../web/format.js';
+import { renderMarkdown, safeHref, telHref } from '../../web/format.js';
 import { page } from '../../web/Layout.js';
 import { getCategoryBySlug, listCategories } from '../categories/repo.js';
 import { getPublished, getPublishedBySlug } from '../protocols/repo.js';
-import { getVisibleLocation, listVisibleByCategory, searchLocations } from '../locations/search.js';
+import { getVisibleLocation, listVisibleByCategory, listVisibleGrouped, searchLocations } from '../locations/search.js';
 
 export function familyRoutes(deps: AppDeps): Hono {
   const { db } = deps;
@@ -17,24 +21,36 @@ export function familyRoutes(deps: AppDeps): Hono {
 
   app.get('/', (c) => {
     const cats = listCategories(db);
+    const number =
+      db.select({ n: settings.emergencyNumber }).from(settings).where(eq(settings.id, 1)).get()?.n?.trim() || '911';
+    const counts = new Map(listVisibleGrouped(db, now(), tz()).map((g) => [g.category.id, g.locations.length]));
     return page(
       c,
       'Emergency toolkit',
       <>
-        <h1>Emergency toolkit</h1>
-        <a class="emergency" href="/emergency">
-          Emergency protocols
+        <a class="emergency emergency-call" href={telHref(number)}>
+          <Icon name="phone" /> Call {number}
+        </a>
+        <h2>What to do</h2>
+        <a class="row action-row" href="/emergency">
+          <Icon name="alert-triangle" /> <span>Emergency protocols</span> <Icon name="chevron-right" />
         </a>
         <form class="search" method="get" action="/search" role="search">
           <input type="search" name="q" placeholder="Search (e.g. dentist)" aria-label="Search" />
-          <button type="submit">Search</button>
+          <button type="submit">
+            <Icon name="search" /> Search
+          </button>
         </form>
-        <h2>Categories</h2>
-        {cats.map((cat) => (
-          <a class="row" href={`/c/${cat.slug}`}>
-            {cat.name}
-          </a>
-        ))}
+        <h2>Find help nearby</h2>
+        <div class="tiles">
+          {cats.map((cat) => (
+            <a class="tile" href={`/c/${cat.slug}`}>
+              <Icon name="map-pin" />
+              <span class="tile-name">{cat.name}</span>
+              <span class="tile-count">{counts.get(cat.id) ?? 0}</span>
+            </a>
+          ))}
+        </div>
       </>,
     );
   });
@@ -134,7 +150,27 @@ export function familyRoutes(deps: AppDeps): Hono {
         {protocol.needsRereview ? (
           <WarningBadge kind="warn" summary={protocol.rereviewReason ?? 'Sources changed; under re-review'} />
         ) : null}
-        <article class="protocol">{raw(renderMarkdown(version.bodyMd))}</article>
+        <article class="protocol">
+          {splitSopSections(version.bodyMd).map((chunk) => {
+            const html = raw(renderMarkdown(chunk.md));
+            if (chunk.heading === 'Escalation criteria')
+              return (
+                <section class="callout callout-escalation" data-callout="escalation">
+                  {html}
+                  <Icon name="alert-triangle" />
+                </section>
+              );
+            if (chunk.heading === 'Do not')
+              return (
+                <section class="callout callout-do-not" data-callout="do-not">
+                  {html}
+                  <Icon name="x-octagon" />
+                </section>
+              );
+            if (chunk.heading === 'Steps') return <section class="sop-steps">{html}</section>;
+            return <section class="sop-section">{html}</section>;
+          })}
+        </article>
         <section>
           <h2>Sources</h2>
           <ul class="sources">

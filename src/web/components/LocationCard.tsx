@@ -1,11 +1,27 @@
 import type { FC } from 'hono/jsx';
 import { isReportedClosed, type LocationView } from '../../features/locations/search.js';
 import { formatHHMM, formatMiles, mapsHref, telHref } from '../format.js';
+import { Icon } from './Icon.js';
 import { WarningBadge } from './WarningBadge.js';
 
-function openLine(open: LocationView['openNow']): string {
-  if (open.state === 'open') return open.until ? `Open now · until ${formatHHMM(open.until)}` : 'Open now';
-  return open.state === 'closed' ? 'Closed' : 'Hours unknown';
+function OpenPill({ open }: { open: LocationView['openNow'] }) {
+  if (open.state === 'open') {
+    return (
+      <p class="pill pill-open">
+        <Icon name="check" /> <strong>Open now</strong>
+        {open.until ? <span> until {formatHHMM(open.until)}</span> : null}
+      </p>
+    );
+  }
+  return open.state === 'closed' ? (
+    <p class="pill pill-closed">
+      <Icon name="clock" /> <strong>Closed</strong>
+    </p>
+  ) : (
+    <p class="pill pill-unknown">
+      <Icon name="alert-triangle" /> <strong>Hours unknown</strong>
+    </p>
+  );
 }
 
 export const LocationCard: FC<{ location: LocationView; showCategory?: boolean }> = ({
@@ -24,6 +40,7 @@ export const LocationCard: FC<{ location: LocationView; showCategory?: boolean }
       </h3>
       {showCategory ? <p class="muted">{l.category.name}</p> : null}
       {miles ? <p class="muted">{miles}</p> : null}
+      <OpenPill open={l.openNow} />
       {closed ? (
         <WarningBadge kind="closed" summary={summary} />
       ) : l.status === 'warn' ? (
@@ -31,15 +48,12 @@ export const LocationCard: FC<{ location: LocationView; showCategory?: boolean }
       ) : null}
       {l.phone ? (
         <a class="call" href={telHref(l.phone)}>
-          Call {l.phone}
+          <Icon name="phone" /> Call {l.phone}
         </a>
       ) : null}
       <a class="row" href={mapsHref(l)}>
-        Open in maps
+        <Icon name="map-pin" /> Open in maps
       </a>
-      <p>
-        <strong>{openLine(l.openNow)}</strong>
-      </p>
       {l.hours ? (
         <ul class="hours">
           {l.hours.weekdayText.map((line) => (

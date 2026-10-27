@@ -81,6 +81,15 @@ describe('protocol visibility', () => {
     expect(html).toContain('Published v2 - reviewed 2026-02-01');
   });
 
+  it('escalation and do-not render as callouts', async () => {
+    seedPublished();
+    const html = await (await app.request('/emergency/choking-adult')).text();
+    for (const h of ['Escalation criteria</h2>', 'Do not</h2>', 'Steps</h2>', 'Sources</h2>']) expect(html).toContain(h);
+    expect(html).toMatch(/data-callout="escalation"[^>]*>\s*<h2[^>]*>Escalation criteria<\/h2>/);
+    expect(html).toMatch(/data-callout="do-not"[^>]*>\s*<h2[^>]*>Do not<\/h2>/);
+    expect(html).not.toMatch(/data-callout="[^"]*"[^>]*>\s*<h2[^>]*>Steps/);
+  });
+
   it('superseded slug shows the new published body', async () => {
     seedPublished();
     const html = await (await app.request('/emergency/choking-adult')).text();

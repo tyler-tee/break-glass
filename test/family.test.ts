@@ -43,6 +43,17 @@ describe('family pages', () => {
     expect(html).not.toContain('Rejected Dental');
   });
 
+  it('home leads with the emergency-number call button, then protocols, then categories', async () => {
+    const html = await (await app.request('/')).text();
+    expect(html).toContain('href="tel:911"');
+    expect(html).toContain('Call 911');
+    expect(html).toContain('href="/emergency"');
+    expect(html.indexOf('tel:911')).toBeLessThan(html.indexOf('href="/emergency"'));
+    expect(html.indexOf('href="/emergency"')).toBeLessThan(html.indexOf('role="search"'));
+    expect(html.indexOf('role="search"')).toBeLessThan(html.indexOf('class="tiles"'));
+    expect(html).not.toContain('<script');
+  });
+
   it('search escapes LIKE wildcards', async () => {
     for (const q of ['%', '_']) {
       const html = await (await app.request(`/search?q=${encodeURIComponent(q)}`)).text();
