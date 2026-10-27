@@ -180,7 +180,12 @@ describe('discovery routes', () => {
     await runDiscovery(db, categoryId, discoveryDeps());
     const { app, cookie } = await makeApp(false);
     const near = rows()[0]!;
-    const res = await post(app, cookie, `/admin/locations/${near.id}/approve`, 'return=1');
+    const res = await post(
+      app,
+      cookie,
+      `/admin/locations/${near.id}/approve`,
+      new URLSearchParams({ return_to: '/admin/candidates?category=test-dentist' }).toString(),
+    );
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/admin/candidates?category=test-dentist');
     expect(rows()[0]!.status).toBe('approved');
@@ -219,5 +224,28 @@ describe('discovery routes', () => {
     const res = await post(app, cookie, '/admin/settings/geocode', new URLSearchParams({ address: 'x' }).toString());
     expect(res.status).toBe(400);
     expect(await res.text()).toContain('GOOGLE_PLACES_API_KEY');
+  });
+
+  const forbiddenFetch = (async () =>
+    new Response('{"error":{"message":"API key invalid"}}', { status: 403 })) as unknown as typeof fetch;
+  const makeFailingApp = async () => {
+    const app = createApp({ db, env: await env(), now: () => now, places: { fetch: forbiddenFetch, apiKey: 'bad' } });
+    return { app, cookie: await adminLogin(app, 'correct horse') };
+  };
+
+  it('discover route maps PlacesError to 502', async () => {
+    const { app, cookie } = await makeFailingApp();
+    const res = await post(app, cookie, `/admin/categories/${categoryId}/discover`);
+    expect(res.status).toBe(502);
+    const html = await res.text();
+    expect(html).toContain('Places API error 403');
+    expect(html).toContain('API key invalid');
+  });
+
+  it('geocode route maps PlacesError to 502', async () => {
+    const { app, cookie } = await makeFailingApp();
+    const res = await post(app, cookie, '/admin/settings/geocode', new URLSearchParams({ address: 'x' }).toString());
+    expect(res.status).toBe(502);
+    expect(await res.text()).toContain('Places API error 403');
   });
 });

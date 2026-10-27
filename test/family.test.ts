@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { Db } from '../src/db/client.js';
-import { categories, locations } from '../src/db/schema.js';
+import { categories, locationChanges, locations } from '../src/db/schema.js';
 import { seed } from '../src/db/seed.js';
 import { loadEnv } from '../src/env.js';
 import { eq } from 'drizzle-orm';
@@ -80,6 +80,17 @@ describe('family pages', () => {
     const html = await (await app.request('/search?q=dentist')).text();
     expect(html.indexOf('Shut Dental')).toBeGreaterThan(html.indexOf('Far Dental'));
     expect(html).toContain('Reported closed');
+  });
+
+  it('warn card shows badge with "phone"', async () => {
+    const row = insertDentist({ name: 'Shifty Dental', status: 'warn' });
+    db.insert(locationChanges)
+      .values({ locationId: row.id, detectedAt: new Date(), field: 'phone', oldValue: '1', newValue: '2' })
+      .run();
+    const html = await (await app.request('/search?q=Shifty')).text();
+    expect(html).toContain('Shifty Dental');
+    expect(html).toContain('⚠');
+    expect(html).toContain('phone');
   });
 
   it('category page lists its visible dentists and unknown slug is 404', async () => {

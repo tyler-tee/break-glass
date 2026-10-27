@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import type { AppDeps } from '../../app.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
-import { CallBudget } from '../../services/places/client.js';
+import { placesErrorPage } from '../../web/placesErrorPage.js';
+import { CallBudget, PlacesError } from '../../services/places/client.js';
 import { NoHomeLocation, runDiscovery } from '../locations/discovery.js';
 import { CategoryError, createCategory, deleteCategory, getCategory, listCategories, updateCategory } from './repo.js';
 
@@ -172,6 +173,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
       if (e instanceof NoHomeLocation) {
         return listPage(c, { error: 'Set the home location in Settings first', status: 400 });
       }
+      if (e instanceof PlacesError) return placesErrorPage(c, e);
       throw e;
     }
   });

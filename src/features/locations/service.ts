@@ -9,6 +9,7 @@ import {
   getLocation,
   insertLocation,
   insertSnapshot,
+  latestSnapshot,
   resolveOpenChanges,
   updateLocationRow,
 } from './repo.js';
@@ -129,7 +130,10 @@ export function approveLocation(db: Db, id: number, now: Date): Location {
   if (!current) throw new LocationError('not_found', 'Location not found');
   requireTransition(current, 'approved');
   return db.transaction((tx) => {
+    // Re-approving a warned row adopts the latest fetched details as the new baseline.
+    const adopted = current.status === 'warn' ? (latestSnapshot(tx, id)?.payload ?? {}) : {};
     const updated = updateLocationRow(tx, id, {
+      ...adopted,
       status: 'approved',
       lastVerifiedAt: now,
       updatedAt: now,
@@ -140,6 +144,15 @@ export function approveLocation(db: Db, id: number, now: Date): Location {
     insertSnapshot(tx, { locationId: id, fetchedAt: now, payload, hash: hashTracked(payload) });
     return updated;
   });
+}
+
+export function reapproveLocation(db: Db, id: number, now: Date): Location {
+  const current = getLocation(db, id);
+  if (!current) throw new LocationError('not_found', 'Location not found');
+  if (current.status !== 'warn') {
+    throw new LocationError('invalid_transition', `Cannot re-approve a ${current.status} location`);
+  }
+  return approveLocation(db, id, now);
 }
 
 export function rejectLocation(db: Db, id: number, now: Date): Location {

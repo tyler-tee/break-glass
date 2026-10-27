@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import type { AppDeps } from '../../app.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
-import { CallBudget, geocode } from '../../services/places/client.js';
+import { CallBudget, PlacesError, geocode } from '../../services/places/client.js';
 import { page } from '../../web/Layout.js';
+import { placesErrorPage } from '../../web/placesErrorPage.js';
 import { SettingsValidationError, getSettings, updateSettings, type Settings } from './settingsRepo.js';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -107,7 +108,13 @@ export function settingsRoutes(deps: AppDeps): Hono {
       return formPage(c, getSettings(deps.db), { error: 'Set GOOGLE_PLACES_API_KEY to enable geocoding', status: 400 });
     }
     if (address === '') return formPage(c, getSettings(deps.db), { error: 'Address is required', status: 400 });
-    const hit = await geocode(address, { ...deps.places, budget: new CallBudget(deps.env.PLACES_CALL_CAP) });
+    let hit: Awaited<ReturnType<typeof geocode>>;
+    try {
+      hit = await geocode(address, { ...deps.places, budget: new CallBudget(deps.env.PLACES_CALL_CAP) });
+    } catch (e) {
+      if (e instanceof PlacesError) return placesErrorPage(c, e);
+      throw e;
+    }
     if (!hit) return formPage(c, getSettings(deps.db), { error: 'Address not found', status: 400 });
     updateSettings(deps.db, { homeLabel: address, homeLat: hit.lat, homeLng: hit.lng });
     return c.redirect('/admin/settings?saved=1', 302);

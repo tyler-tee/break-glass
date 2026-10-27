@@ -4,13 +4,14 @@ import type { LocationStatus } from '../../domain/types.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
 import { ReviewQueue } from '../../web/components/ReviewQueue.js';
-import { getCategoryBySlug, getCategory, listCategories } from '../categories/repo.js';
-import { getLocation, listLocations, type Location } from './repo.js';
+import { getCategoryBySlug, listCategories } from '../categories/repo.js';
+import { getLocation, listLocations, listOpenChanges } from './repo.js';
 import {
   LocationError,
   approveLocation,
   canTransition,
   createManualLocation,
+  reapproveLocation,
   rejectLocation,
   updateLocation,
   type ManualLocationInput,
@@ -276,9 +277,8 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
   const transitionRoute = (act: typeof approveLocation) => async (c: Parameters<typeof page>[0] & { req: { param(n: string): string } }) => {
     const id = Number(c.req.param('id'));
     const body = await c.req.parseBody();
-    let loc: Location;
     try {
-      loc = act(db, id, now());
+      act(db, id, now());
     } catch (e) {
       if (e instanceof LocationError) {
         if (e.code === 'not_found') return c.notFound();
@@ -286,14 +286,13 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
       }
       throw e;
     }
-    if (str(body['return']) !== '') {
-      const slug = getCategory(db, loc.categoryId)?.slug;
-      if (slug) return c.redirect(`/admin/candidates?category=${encodeURIComponent(slug)}`, 302);
-    }
-    return c.redirect('/admin/locations', 302);
+    const returnTo = str(body['return_to']);
+    const safe = returnTo.startsWith('/admin/') && !returnTo.includes('//');
+    return c.redirect(safe ? returnTo : '/admin/locations', 302);
   };
 
   app.post('/:id/approve', transitionRoute(approveLocation));
+  app.post('/:id/reapprove', transitionRoute(reapproveLocation));
   app.post('/:id/reject', transitionRoute(rejectLocation));
 
   app.post('/:id', async (c) => {
@@ -366,10 +365,57 @@ export function candidatesRoutes(deps: AppDeps): Hono {
           items={items}
           approveAction={(id) => `/admin/locations/${id}/approve`}
           rejectAction={(id) => `/admin/locations/${id}/reject`}
+          returnTo={`/admin/candidates?category=${encodeURIComponent(category.slug)}`}
         />
         <p>
           <a href="/admin/candidates">All categories</a>
         </p>
+      </>,
+    );
+  });
+
+  return app;
+}
+
+export function warnRoutes(deps: AppDeps): Hono {
+  const { db } = deps;
+  const app = new Hono();
+
+  app.get('/', (c) => {
+    const items = listLocations(db)
+      .filter((l) => l.status === 'warn')
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .map((l) => {
+        const changes = listOpenChanges(db, l.id);
+        const summary = changes.length ? [...new Set(changes.map((ch) => ch.field))].join(', ') : 'Details changed';
+        return {
+          id: l.id,
+          title: l.name,
+          subtitle: [l.categoryName, l.distanceMi === null ? null : `${l.distanceMi.toFixed(1)} mi`]
+            .filter((p) => p !== null)
+            .join(' · '),
+          changes,
+          badge: {
+            kind: l.businessStatus === 'CLOSED_PERMANENTLY' ? ('closed' as const) : ('warn' as const),
+            summary,
+          },
+        };
+      });
+    return page(
+      c,
+      'Warn queue',
+      <>
+        <h1>Warn queue</h1>
+        <AdminNav />
+        <ReviewQueue
+          title="Needs review"
+          empty="Nothing needs review."
+          items={items}
+          approveAction={(id) => `/admin/locations/${id}/reapprove`}
+          rejectAction={(id) => `/admin/locations/${id}/reject`}
+          approveLabel="Re-approve"
+          returnTo="/admin/warn"
+        />
       </>,
     );
   });
