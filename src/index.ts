@@ -49,7 +49,15 @@ const scheduler = startScheduler({
   log: console,
 });
 
-const app = createApp({ db, env, places, scheduler, ...(extract ? { extract } : {}) });
+const app = createApp({
+  db,
+  env,
+  places,
+  scheduler,
+  siteFetch: globalThis.fetch,
+  ...(extract ? { extract } : {}),
+  ...(llm ? { llm } : {}),
+});
 
 serve({ fetch: app.fetch, port: env.PORT, hostname: '0.0.0.0' });
 console.log(`Listening on http://0.0.0.0:${env.PORT}`);

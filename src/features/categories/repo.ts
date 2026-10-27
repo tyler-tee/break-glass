@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import { categories, locations } from '../../db/schema.js';
+import { slugify } from '../../domain/slug.js';
 
 export type Category = typeof categories.$inferSelect;
 
@@ -14,13 +15,6 @@ export class CategoryError extends Error {
     super(message);
     this.name = 'CategoryError';
   }
-}
-
-export function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 }
 
 export function listCategories(db: Db): Category[] {

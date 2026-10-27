@@ -233,3 +233,30 @@ export async function fetchWebsiteText(
   }
   return pages;
 }
+
+const MAX_PAGE_CHARS = 60_000;
+
+export async function fetchPage(
+  url: string,
+  deps: { fetch: typeof fetch; lookup?: LookupFn; timeoutMs?: number; log?: Logger },
+): Promise<{ url: string; text: string; title: string | null } | null> {
+  const ctx: FetchCtx = {
+    fetch: deps.fetch,
+    timeoutMs: deps.timeoutMs ?? 10_000,
+    lookup: deps.lookup ?? defaultLookup,
+    ...(deps.log ? { log: deps.log } : {}),
+  };
+  try {
+    const html = await fetchHtml(url, ctx);
+    if (html === null) {
+      deps.log?.warn(`page fetch for ${url}: non-OK, non-HTML or blocked response`);
+      return null;
+    }
+    const m = /<title\b[^>]*>([\s\S]*?)<\/title\s*>/i.exec(html);
+    const title = m ? decodeEntities(m[1] ?? '').replace(/\s+/g, ' ').trim() : '';
+    return { url, text: htmlToText(html).slice(0, MAX_PAGE_CHARS), title: title === '' ? null : title };
+  } catch (err) {
+    deps.log?.warn(`page fetch failed for ${url}: ${String(err)}`);
+    return null;
+  }
+}

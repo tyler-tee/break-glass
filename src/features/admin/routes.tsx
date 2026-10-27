@@ -5,6 +5,7 @@ import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
 import { categoriesRoutes } from '../categories/routes.js';
 import { candidatesRoutes, locationsAdminRoutes, warnRoutes } from '../locations/adminRoutes.js';
+import { protocolsAdminRoutes } from '../protocols/adminRoutes.js';
 import { settingsRoutes } from './settingsRoutes.js';
 import type { JobName, RunResult } from '../../jobs/scheduler.js';
 import { SESSION_COOKIE, createSession, requireAdmin, verifyPassword } from './auth.js';
@@ -89,6 +90,7 @@ export function adminRoutes(deps: AppDeps): Hono {
   app.route('/locations', locationsAdminRoutes(deps));
   app.route('/candidates', candidatesRoutes(deps));
   app.route('/warn', warnRoutes(deps));
+  app.route('/protocols', protocolsAdminRoutes(deps));
 
   app.post('/logout', (c) => {
     deleteCookie(c, SESSION_COOKIE, { path: '/' });
