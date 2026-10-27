@@ -6,7 +6,10 @@ import { page } from '../../web/Layout.js';
 import { categoriesRoutes } from '../categories/routes.js';
 import { candidatesRoutes, locationsAdminRoutes, warnRoutes } from '../locations/adminRoutes.js';
 import { settingsRoutes } from './settingsRoutes.js';
+import type { JobName, RunResult } from '../../jobs/scheduler.js';
 import { SESSION_COOKIE, createSession, requireAdmin, verifyPassword } from './auth.js';
+
+const JOB_NAMES: readonly string[] = ['refreshLocations', 'recheckProtocols'];
 
 const safeNext = (next: unknown): string =>
   typeof next === 'string' && (next === '/admin' || next.startsWith('/admin/')) ? next : '/admin';
@@ -49,16 +52,37 @@ export function adminRoutes(deps: AppDeps): Hono {
 
   app.use('*', requireAdmin(env.SESSION_SECRET, now));
 
-  app.get('/', (c) =>
-    page(
+  app.get('/', (c) => {
+    const job = c.req.query('job');
+    const result = c.req.query('result');
+    return page(
       c,
       'Admin',
       <>
         <h1>Admin</h1>
         <AdminNav />
+        {job && result && (
+          <p role="status">
+            {job}: {result}
+          </p>
+        )}
+        <form method="post" action="/admin/jobs/refreshLocations/run">
+          <button type="submit">Run location refresh now</button>
+        </form>
+        <form method="post" action="/admin/jobs/recheckProtocols/run">
+          <button type="submit">Re-check protocols now</button>
+        </form>
       </>,
-    ),
-  );
+    );
+  });
+
+  app.post('/jobs/:name/run', async (c) => {
+    const name = c.req.param('name');
+    if (!JOB_NAMES.includes(name as JobName)) return c.notFound();
+    if (!deps.scheduler) return page(c, 'Scheduler not running', <h1>Scheduler not running</h1>, 503);
+    const result: RunResult = await deps.scheduler.runNow(name as JobName);
+    return c.redirect(`/admin?job=${name}&result=${result}`, 302);
+  });
 
   app.route('/settings', settingsRoutes(deps));
   app.route('/categories', categoriesRoutes(deps));

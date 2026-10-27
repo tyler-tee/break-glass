@@ -3,9 +3,10 @@ import type { Db } from './db/client.js';
 import type { Env } from './env.js';
 import { familyRoutes } from './features/family/routes.js';
 import { apiRoutes } from './features/api/routes.js';
+import type { SchedulerHandle } from './jobs/scheduler.js';
 import { adminRoutes } from './features/admin/routes.js';
 
-export type AppDeps = { db: Db; env: Env; now?: () => Date; scheduler?: { reschedule(): void };
+export type AppDeps = { db: Db; env: Env; now?: () => Date; scheduler?: SchedulerHandle;
   places?: { fetch: typeof fetch; apiKey: string };
 };
 
