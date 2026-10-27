@@ -53,8 +53,7 @@ describe('admin dashboard', () => {
     const cat = db.insert(categories).values({ name: 'Dentist', slug: 'dentist', searchTerms: ['dentist'] }).returning().get();
     const loc = (name: string, status: 'approved' | 'candidate' | 'warn') =>
       db.insert(locations).values({ categoryId: cat.id, name, status, createdAt: now, updatedAt: now }).run();
-    loc('A1', 'approved');
-    loc('A2', 'approved');
+    for (const n of ['A1', 'A2', 'A3', 'A4']) loc(n, 'approved');
     loc('C1', 'candidate');
     loc('W1', 'warn');
     loc('W2', 'warn');
@@ -63,8 +62,11 @@ describe('admin dashboard', () => {
       const p = db.insert(protocols).values({ slug, title: slug, tags: [], needsRereview }).returning().get();
       if (published) insertVersion(db, { protocolId: p.id, version: 1, status: 'published', bodyMd: 'x', createdAt: now, reviewedAt: now });
     };
-    mk('cpr', true, true);
-    mk('burn', true, false);
+    mk('p1', true, true);
+    mk('p2', true, true);
+    mk('p3', true, false);
+    mk('p4', true, false);
+    mk('p5', true, false);
   };
 
   it('overview shows linked counts', async () => {
@@ -76,11 +78,11 @@ describe('admin dashboard', () => {
       expect(t).toContain(`<span class="stat-num">${n}</span>`);
       expect(t).toContain(`<span class="stat-label">${label}</span>`);
     };
-    expectTile('approved', '/admin/locations', '2', 'approved places');
+    expectTile('approved', '/admin/locations', '4', 'approved places');
     expectTile('candidates', '/admin/candidates', '1', 'candidate awaiting review');
     expectTile('warnings', '/admin/warn', '3', 'warnings');
-    expectTile('published', '/admin/protocols', '1', 'published protocol');
-    expectTile('rereview', '/admin/protocols', '2', 'protocols needing re-review');
+    expectTile('published', '/admin/protocols', '2', 'published protocols');
+    expectTile('rereview', '/admin/protocols', '5', 'protocols needing re-review');
   });
 
   it('incomplete install shows Continue setup', async () => {
