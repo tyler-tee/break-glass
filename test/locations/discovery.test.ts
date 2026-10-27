@@ -101,6 +101,35 @@ describe('runDiscovery', () => {
     expect(rows()).toHaveLength(0);
   });
 
+  it('stops at cap after partial inserts', async () => {
+    const report = await runDiscovery(db, categoryId, discoveryDeps(2));
+    expect(report).toMatchObject({ inserted: 1, stoppedEarly: true, callsUsed: 2 });
+    expect(rows().map((l) => l.name)).toEqual(['Near Dental Group']);
+  });
+
+  it('details failure falls back to the summary row', async () => {
+    const gone = createCategory(db, { name: 'Gone Dentist', searchTerms: ['gone dentist'] }).id;
+    const warns: string[] = [];
+    const log = { ...silent, warn: (m: unknown) => void warns.push(String(m)) };
+    const report = await runDiscovery(db, gone, { ...discoveryDeps(), log });
+    expect(report).toMatchObject({ inserted: 2, detailsFetched: 1, stoppedEarly: false });
+    const found = db.select().from(locations).where(eq(locations.categoryId, gone)).all();
+    expect(found.map((l) => l.status)).toEqual(['candidate', 'candidate']);
+    const g = found.find((l) => l.placeId === 'ChIJgone')!;
+    expect(g).toMatchObject({ name: 'Gone Dental', phone: null, hours: null, rating: 4 });
+    expect(found.find((l) => l.placeId === 'ChIJnear')!.phone).toBe('(801) 555-0100');
+    expect(warns).toHaveLength(1);
+    expect(warns[0]).toContain('ChIJgone');
+  });
+
+  it('cross-term duplicates are inserted once', async () => {
+    const multi = createCategory(db, { name: 'Multi', searchTerms: ['emergency dentist', 'gone dentist'] }).id;
+    const report = await runDiscovery(db, multi, discoveryDeps());
+    expect(report).toMatchObject({ searched: 2, found: 3, inserted: 3 });
+    const found = db.select().from(locations).where(eq(locations.categoryId, multi)).all();
+    expect(found.filter((l) => l.name === 'Near Dental Group')).toHaveLength(1);
+  });
+
   it('approving a candidate makes it searchable', async () => {
     await runDiscovery(db, categoryId, discoveryDeps());
     const { app } = await makeApp(false);

@@ -90,6 +90,35 @@ function main(): void {
   );
   authorFixture(
     FIXTURE_DIR,
+    { method: 'POST', url: `${BASE}/places:searchText`, body: searchBody('gone dentist') },
+    {
+      status: 200,
+      json: {
+        places: [
+          {
+            id: 'ChIJgone',
+            displayName: { text: 'Gone Dental', languageCode: 'en' },
+            formattedAddress: '1 Gone St, Salt Lake City, UT 84101, USA',
+            location: { latitude: 40.77, longitude: -111.89 },
+            rating: 4.0,
+            userRatingCount: 10,
+            businessStatus: 'OPERATIONAL',
+          },
+          {
+            id: 'ChIJnear',
+            displayName: { text: 'Near Dental Group', languageCode: 'en' },
+            formattedAddress: '100 S Main St, Salt Lake City, UT 84101, USA',
+            location: { latitude: 40.775, longitude: -111.891 },
+            rating: 4.6,
+            userRatingCount: 120,
+            businessStatus: 'OPERATIONAL',
+          },
+        ],
+      },
+    },
+  );
+  authorFixture(
+    FIXTURE_DIR,
     { method: 'GET', url: `${BASE}/places/ChIJfar` },
     {
       status: 200,
