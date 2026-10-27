@@ -478,5 +478,11 @@ button.btn-go { color: var(--go-ink); background: var(--go); border-color: var(-
   .t-protocols td:nth-child(2)::before { content: "Slug: "; }
   .t-protocols td:nth-child(3)::before { content: "Published: "; }
   .t-protocols td:nth-child(4)::before { content: "Latest: "; }
+  .stack-table td:empty { display: none; }
   .stack-table td.row-actions { display: flex; }
 }
+
+/* Admin forms: grouped fields */
+.admin-form fieldset { margin: var(--space-4) 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); }
+.admin-form legend { padding: 0 var(--space-2); font-weight: 700; }
+.admin-form fieldset > p { margin: var(--space-2) 0; }

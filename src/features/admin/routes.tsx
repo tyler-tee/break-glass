@@ -67,12 +67,12 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
     const locs = listLocations(deps.db);
     const count = (status: string) => locs.filter((l) => l.status === status).length;
     const needsRereview = listProtocols(deps.db).filter((p) => p.needsRereview).length;
-    const stats: { href: string; n: number; one: string; many: string }[] = [
-      { href: '/admin/locations', n: count('approved'), one: 'approved place', many: 'approved places' },
-      { href: '/admin/candidates', n: count('candidate'), one: 'candidate awaiting review', many: 'candidates awaiting review' },
-      { href: '/admin/warn', n: count('warn'), one: 'warning', many: 'warnings' },
-      { href: '/admin/protocols', n: getPublished(deps.db).length, one: 'published protocol', many: 'published protocols' },
-      { href: '/admin/protocols', n: needsRereview, one: 'protocol needing re-review', many: 'protocols needing re-review' },
+    const stats: { key: string; href: string; n: number; one: string; many: string }[] = [
+      { key: 'approved', href: '/admin/locations', n: count('approved'), one: 'approved place', many: 'approved places' },
+      { key: 'candidates', href: '/admin/candidates', n: count('candidate'), one: 'candidate awaiting review', many: 'candidates awaiting review' },
+      { key: 'warnings', href: '/admin/warn', n: count('warn'), one: 'warning', many: 'warnings' },
+      { key: 'published', href: '/admin/protocols', n: getPublished(deps.db).length, one: 'published protocol', many: 'published protocols' },
+      { key: 'rereview', href: '/admin/protocols', n: needsRereview, one: 'protocol needing re-review', many: 'protocols needing re-review' },
     ];
     const incomplete = installState(deps) === 'incomplete';
     return page(
@@ -104,7 +104,7 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
           </h2>
           <div class="stat-grid">
             {stats.map((s) => (
-              <a href={s.href} class="stat">
+              <a href={s.href} data-stat={s.key} class="stat">
                 <span class="stat-num">{s.n}</span>
                 <span class="stat-label">{s.n === 1 ? s.one : s.many}</span>
               </a>

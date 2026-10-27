@@ -3,7 +3,8 @@ import { createApp } from '../../src/app.js';
 import type { Db } from '../../src/db/client.js';
 import { loadEnv } from '../../src/env.js';
 import { hashPassword } from '../../src/features/admin/auth.js';
-import { categories, locations, protocols } from '../../src/db/schema.js';
+import { eq } from 'drizzle-orm';
+import { categories, locations, protocols, settings } from '../../src/db/schema.js';
 import { insertVersion } from '../../src/features/protocols/repo.js';
 import { dbLedger } from '../../src/services/places/budget.js';
 import { adminLogin } from '../helpers/adminLogin.js';
@@ -42,16 +43,56 @@ describe('admin dashboard', () => {
     expect(html).toContain('nearing the monthly cap');
   });
 
+  const tile = (html: string, key: string): string => {
+    const start = html.indexOf(`data-stat="${key}"`);
+    expect(start, `tile ${key} present`).toBeGreaterThan(-1);
+    return html.slice(html.lastIndexOf('<a ', start), html.indexOf('</a>', start) + 4);
+  };
+
+  const seedCounts = () => {
+    const cat = db.insert(categories).values({ name: 'Dentist', slug: 'dentist', searchTerms: ['dentist'] }).returning().get();
+    const loc = (name: string, status: 'approved' | 'candidate' | 'warn') =>
+      db.insert(locations).values({ categoryId: cat.id, name, status, createdAt: now, updatedAt: now }).run();
+    loc('A1', 'approved');
+    loc('A2', 'approved');
+    loc('C1', 'candidate');
+    loc('W1', 'warn');
+    loc('W2', 'warn');
+    loc('W3', 'warn');
+    const mk = (slug: string, needsRereview: boolean, published: boolean) => {
+      const p = db.insert(protocols).values({ slug, title: slug, tags: [], needsRereview }).returning().get();
+      if (published) insertVersion(db, { protocolId: p.id, version: 1, status: 'published', bodyMd: 'x', createdAt: now, reviewedAt: now });
+    };
+    mk('cpr', true, true);
+    mk('burn', true, false);
+  };
+
   it('overview shows linked counts', async () => {
-    const cat = db.insert(categories).values({ name: 'Dentist', slug: 'dentist', searchTerms: ['dentist'] } as never).returning().get();
-    db.insert(locations)
-      .values({ categoryId: cat.id, name: 'Smile Co', status: 'approved', createdAt: now, updatedAt: now })
-      .run();
-    const p = db.insert(protocols).values({ slug: 'cpr', title: 'CPR', tags: [] }).returning().get();
-    insertVersion(db, { protocolId: p.id, version: 1, status: 'published', bodyMd: 'x', createdAt: now, reviewedAt: now });
+    seedCounts();
     const html = await dashboard();
-    const section = html.slice(html.indexOf('class="overview'));
-    expect(section).toMatch(/<a href="\/admin\/locations"[^>]*>[\s\S]*?>1<[\s\S]*?approved place/);
-    expect(section).toMatch(/<a href="\/admin\/protocols"[^>]*>[\s\S]*?>1<[\s\S]*?published protocol/);
+    const expectTile = (key: string, href: string, n: string, label: string) => {
+      const t = tile(html, key);
+      expect(t).toContain(`href="${href}"`);
+      expect(t).toContain(`<span class="stat-num">${n}</span>`);
+      expect(t).toContain(`<span class="stat-label">${label}</span>`);
+    };
+    expectTile('approved', '/admin/locations', '2', 'approved places');
+    expectTile('candidates', '/admin/candidates', '1', 'candidate awaiting review');
+    expectTile('warnings', '/admin/warn', '3', 'warnings');
+    expectTile('published', '/admin/protocols', '1', 'published protocol');
+    expectTile('rereview', '/admin/protocols', '2', 'protocols needing re-review');
+  });
+
+  it('incomplete install shows Continue setup', async () => {
+    const html = await dashboard();
+    expect(html).toMatch(/<a [^>]*href="\/admin\/setup"[^>]*>\s*Continue setup\s*<\/a>/);
+    expect(html).not.toContain('Run setup again');
+  });
+
+  it('ready install shows Run setup again and no Continue setup', async () => {
+    db.update(settings).set({ setupCompletedAt: now }).where(eq(settings.id, 1)).run();
+    const html = await dashboard();
+    expect(html).toContain('<a href="/admin/setup">Run setup again</a>');
+    expect(html).not.toContain('Continue setup');
   });
 });

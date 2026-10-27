@@ -25,51 +25,62 @@ export function settingsRoutes(deps: AppDeps): Hono {
         <h1>Settings</h1>
         {opts.saved && <p role="status">Saved.</p>}
         {opts.error && <p role="alert">{opts.error}</p>}
-        <form method="post" action="/admin/settings">
-          <p>
-            <label>
-              Home label <input name="home_label" value={s.homeLabel ?? ''} />
-            </label>
-          </p>
-          <p>
-            <label>
-              Latitude <input name="home_lat" value={s.homeLat ?? ''} />
-            </label>
-          </p>
-          <p>
-            <label>
-              Longitude <input name="home_lng" value={s.homeLng ?? ''} />
-            </label>
-          </p>
-          <p>
-            <label>
-              Default radius (miles) <input name="default_radius_mi" value={s.defaultRadiusMi ?? ''} />
-            </label>
-          </p>
-          <p>
-            <label>
-              Time zone <input name="home_tz" value={s.homeTz} />
-            </label>
-          </p>
-          <p>
-            <label>
-              Location refresh cron <input name="location_refresh_cron" value={s.locationRefreshCron ?? ''} />
-            </label>
-          </p>
-          <p>
-            <label>
-              Protocol refresh cron <input name="protocol_refresh_cron" value={s.protocolRefreshCron ?? ''} />
-            </label>
-          </p>
+        <form method="post" action="/admin/settings" class="admin-form">
+          <fieldset>
+            <legend>Home location</legend>
+            <p class="muted">Used for distances on the family site. Use the address lookup below to fill these in.</p>
+            <p>
+              <label>
+                Home label <input name="home_label" value={s.homeLabel ?? ''} />
+              </label>
+            </p>
+            <p>
+              <label>
+                Latitude <input name="home_lat" value={s.homeLat ?? ''} />
+              </label>
+            </p>
+            <p>
+              <label>
+                Longitude <input name="home_lng" value={s.homeLng ?? ''} />
+              </label>
+            </p>
+            <p>
+              <label>
+                Default radius (miles) <input name="default_radius_mi" value={s.defaultRadiusMi ?? ''} />
+              </label>
+            </p>
+            <p>
+              <label>
+                Time zone <input name="home_tz" value={s.homeTz} />
+              </label>
+            </p>
+          </fieldset>
+          <fieldset>
+            <legend>Schedules</legend>
+            <p class="muted">Cron expressions for the background refresh jobs.</p>
+            <p>
+              <label>
+                Location refresh cron <input name="location_refresh_cron" value={s.locationRefreshCron ?? ''} />
+              </label>
+            </p>
+            <p>
+              <label>
+                Protocol refresh cron <input name="protocol_refresh_cron" value={s.protocolRefreshCron ?? ''} />
+              </label>
+            </p>
+          </fieldset>
           <button type="submit">Save</button>
         </form>
-        <form method="post" action="/admin/settings/geocode">
-          <p>
-            <label>
-              Address <input name="address" />
-            </label>
-          </p>
-          <button type="submit">Geocode address</button>
+        <form method="post" action="/admin/settings/geocode" class="admin-form">
+          <fieldset>
+            <legend>Look up an address</legend>
+            <p>
+              <label>
+                Address <input name="address" />
+              </label>
+            </p>
+            <button type="submit" class="btn-secondary">Geocode address</button>
+          </fieldset>
         </form>
       </>,
       opts.status ?? 200,
