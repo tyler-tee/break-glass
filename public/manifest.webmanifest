@@ -1,0 +1,9 @@
+{
+  "name": "Break Glass",
+  "short_name": "Break Glass",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f5f6e",
+  "icons": [{ "src": "/assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

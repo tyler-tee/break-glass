@@ -9,6 +9,7 @@ import { familyRoutes } from './features/family/routes.js';
 import { apiRoutes } from './features/api/routes.js';
 import type { SchedulerHandle } from './jobs/scheduler.js';
 import { adminRoutes } from './features/admin/routes.js';
+import { registerAssets } from './web/assets.js';
 
 export type AppDeps = { db: Db; env: Env; now?: () => Date; scheduler?: SchedulerHandle;
   places?: { fetch: typeof fetch; apiKey: string };
@@ -28,6 +29,7 @@ export function createApp(deps: AppDeps): Hono {
       return c.json({ ok: false }, 503);
     }
   });
+  registerAssets(app);
   app.route('/', familyRoutes(deps));
   app.route('/api', apiRoutes(deps));
   app.route('/admin', adminRoutes(deps));

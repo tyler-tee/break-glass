@@ -15,6 +15,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/public ./public
 # SQLite in WAL mode needs write access to the whole directory, not just the file.
 RUN mkdir -p /data && chown node:node /data
 USER node
