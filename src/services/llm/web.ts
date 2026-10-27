@@ -23,7 +23,11 @@ export function htmlToText(html: string): string {
   const stripped = html
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1\s*>/gi, '')
-    .replace(/<br\s*\/?>|<\/(?:p|div|li|h[1-6]|tr)\s*>/gi, '\n')
+    .replace(/<\/(?:td|th)\s*>/gi, ' ')
+    .replace(
+      /<br\s*\/?>|<hr\s*\/?>|<\/(?:p|div|li|h[1-6]|tr|dt|dd|section|article|header|footer|nav|ul|ol|table|blockquote|pre|option)\s*>/gi,
+      '\n',
+    )
     .replace(/<[^>]*>/g, '');
   return decodeEntities(stripped)
     .replace(/[ \t]+/g, ' ')
@@ -31,6 +35,8 @@ export function htmlToText(html: string): string {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+const MAX_HTML_CHARS = 500_000;
 
 const RELEVANT = /hours|contact|insurance|patients|new-patient|location|emergenc/i;
 
@@ -76,7 +82,7 @@ async function fetchHtml(
   if (!res.ok) return null;
   const type = res.headers.get('content-type');
   if (type !== null && !/^\s*(text\/html|application\/xhtml\+xml)\b/i.test(type)) return null;
-  return res.text();
+  return (await res.text()).slice(0, MAX_HTML_CHARS);
 }
 
 export async function fetchWebsiteText(
@@ -92,7 +98,10 @@ export async function fetchWebsiteText(
     deps.log?.warn(`website fetch failed for ${url}: ${String(err)}`);
     return [];
   }
-  if (homepageHtml === null) return [];
+  if (homepageHtml === null) {
+    deps.log?.warn(`website fetch for ${url}: non-OK or non-HTML response`);
+    return [];
+  }
 
   const pages: FetchedPage[] = [{ url, text: htmlToText(homepageHtml).slice(0, maxChars) }];
   let targets: string[];

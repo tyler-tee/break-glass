@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchWebsiteText, htmlToText, pickPages } from '../../src/services/llm/web.js';
 import { fakeSiteFetch } from '../helpers/fakeSiteFetch.js';
 
@@ -15,6 +15,15 @@ describe('htmlToText', () => {
         '<p>Tom &amp; Jerry &lt;3 &quot;hi&quot; it&#39;s&nbsp;ok &#65;&#x42;</p><div>Next</div>',
     );
     expect(text).toBe('Tom & Jerry <3 "hi" it\'s ok AB\nNext');
+  });
+});
+
+describe('htmlToText block separation', () => {
+  it('separates table cells and block elements', () => {
+    expect(htmlToText('<table><tr><td>Monday</td><td>8am-5pm</td></tr><tr><td>Tuesday</td><td>9am-5pm</td></tr></table>')).toBe(
+      'Monday 8am-5pm\nTuesday 9am-5pm',
+    );
+    expect(htmlToText('<section>A</section><section>B</section>')).toBe('A\nB');
   });
 });
 
@@ -88,6 +97,16 @@ describe('fetchWebsiteText', () => {
     const urls = pages.map((p) => p.url);
     expect(urls).not.toContain('https://near-dental.example/insurance');
     expect(urls).toHaveLength(4);
+  });
+
+  it('homepage failure is logged', async () => {
+    const warn = vi.fn();
+    const failing = fakeSiteFetch(ROOT, { fail: ['https://near-dental.example/'] });
+    await fetchWebsiteText('https://near-dental.example/', { fetch: failing, log: { info() {}, warn, error() {} } });
+    expect(warn).toHaveBeenCalledTimes(1);
+    const logged = vi.fn();
+    await fetchWebsiteText('https://nowhere.example/', { fetch, log: { info() {}, warn: logged, error() {} } });
+    expect(logged).toHaveBeenCalledTimes(1);
   });
 
   it('returns [] when the homepage fails', async () => {
