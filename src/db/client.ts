@@ -5,6 +5,7 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import * as schema from './schema.js';
 
 export type Db = BetterSQLite3Database<typeof schema>;
+export type DbOrTx = Db | Parameters<Parameters<Db['transaction']>[0]>[0];
 
 export function openDb(path: string): Db {
   const inMemory = path === ':memory:';

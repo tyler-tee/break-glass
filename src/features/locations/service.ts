@@ -128,16 +128,18 @@ export function approveLocation(db: Db, id: number, now: Date): Location {
   const current = getLocation(db, id);
   if (!current) throw new LocationError('not_found', 'Location not found');
   requireTransition(current, 'approved');
-  const updated = updateLocationRow(db, id, {
-    status: 'approved',
-    lastVerifiedAt: now,
-    updatedAt: now,
-    consecutiveFetchFailures: 0,
+  return db.transaction((tx) => {
+    const updated = updateLocationRow(tx, id, {
+      status: 'approved',
+      lastVerifiedAt: now,
+      updatedAt: now,
+      consecutiveFetchFailures: 0,
+    });
+    resolveOpenChanges(tx, id, now);
+    const payload = trackedFromLocation(updated);
+    insertSnapshot(tx, { locationId: id, fetchedAt: now, payload, hash: hashTracked(payload) });
+    return updated;
   });
-  resolveOpenChanges(db, id, now);
-  const payload = trackedFromLocation(updated);
-  insertSnapshot(db, { locationId: id, fetchedAt: now, payload, hash: hashTracked(payload) });
-  return updated;
 }
 
 export function rejectLocation(db: Db, id: number, now: Date): Location {

@@ -1,9 +1,10 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import type { Db } from '../../src/db/client.js';
 import { categories, locationChanges, locations, locationSnapshots } from '../../src/db/schema.js';
 import { seed } from '../../src/db/seed.js';
+import { hashTracked, trackedFromLocation } from '../../src/domain/snapshot.js';
 import { loadEnv } from '../../src/env.js';
 import { hashPassword } from '../../src/features/admin/auth.js';
 import {
@@ -56,8 +57,11 @@ describe('status transitions', () => {
     expect(await search('fresh')).toContain('Fresh Dental');
     const snaps = db.select().from(locationSnapshots).where(eq(locationSnapshots.locationId, loc.id)).all();
     expect(snaps).toHaveLength(1);
-    expect(snaps[0]!.hash).toHaveLength(64);
-    expect(row(loc.id).lastVerifiedAt).toEqual(now);
+    const after = row(loc.id);
+    expect(snaps[0]!.hash).toBe(hashTracked(trackedFromLocation(after)));
+    expect(snaps[0]!.payload).toEqual(trackedFromLocation(after));
+    expect(after.lastVerifiedAt).toEqual(now);
+    expect(after.consecutiveFetchFailures).toBe(0);
   });
 
   it('approved → rejected removes it', async () => {
@@ -91,6 +95,47 @@ describe('status transitions', () => {
     const changes = db.select().from(locationChanges).where(eq(locationChanges.locationId, loc.id)).all();
     expect(changes).toHaveLength(1);
     expect(changes[0]!.resolvedAt).toEqual(now);
+  });
+});
+
+describe('approve edge cases', () => {
+  it('warn → approved is allowed and resolves changes', () => {
+    const t = new Date();
+    const warn = db
+      .insert(locations)
+      .values({
+        categoryId: dentistId(),
+        name: 'Warn Dental',
+        status: 'warn',
+        consecutiveFetchFailures: 2,
+        createdAt: t,
+        updatedAt: t,
+      })
+      .returning()
+      .get();
+    db.insert(locationChanges)
+      .values({ locationId: warn.id, detectedAt: t, field: 'phone', oldValue: 'a', newValue: 'b' })
+      .run();
+    approveLocation(db, warn.id, now);
+    const after = row(warn.id);
+    expect(after.status).toBe('approved');
+    expect(after.consecutiveFetchFailures).toBe(0);
+    const changes = db.select().from(locationChanges).where(eq(locationChanges.locationId, warn.id)).all();
+    expect(changes[0]!.resolvedAt).toEqual(now);
+    expect(db.select().from(locationSnapshots).where(eq(locationSnapshots.locationId, warn.id)).all()).toHaveLength(1);
+  });
+
+  it('approve is atomic when the snapshot insert fails', () => {
+    const loc = fresh();
+    db.insert(locationChanges)
+      .values({ locationId: loc.id, detectedAt: now, field: 'phone', oldValue: 'a', newValue: 'b' })
+      .run();
+    db.run(sql`CREATE TRIGGER fail_snapshot BEFORE INSERT ON location_snapshots BEGIN SELECT RAISE(ABORT, 'boom'); END`);
+    expect(() => approveLocation(db, loc.id, now)).toThrow();
+    expect(row(loc.id).status).toBe('candidate');
+    expect(row(loc.id).lastVerifiedAt).toBeNull();
+    const changes = db.select().from(locationChanges).where(eq(locationChanges.locationId, loc.id)).all();
+    expect(changes[0]!.resolvedAt).toBeNull();
   });
 });
 
