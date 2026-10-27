@@ -1,5 +1,5 @@
 import type { AppDeps } from '../app.js';
-import { getSettings } from './locations/repo.js';
+import { getSettings } from './admin/settingsRepo.js';
 
 export function requestClock(deps: AppDeps): { now: () => Date; tz: () => string } {
   return {

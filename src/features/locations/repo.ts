@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
-import { categories, locationChanges, locations, settings } from '../../db/schema.js';
+import { categories, locationChanges, locations } from '../../db/schema.js';
 import type { FieldChange } from '../../domain/types.js';
 
 export type VisibleLocationRow = typeof locations.$inferSelect & { category: typeof categories.$inferSelect };
@@ -48,10 +48,4 @@ export function listCategories(db: Db): (typeof categories.$inferSelect)[] {
 
 export function getCategoryBySlug(db: Db, slug: string): typeof categories.$inferSelect | null {
   return db.select().from(categories).where(eq(categories.slug, slug)).get() ?? null;
-}
-
-export function getSettings(db: Db): typeof settings.$inferSelect {
-  const row = db.select().from(settings).where(eq(settings.id, 1)).get();
-  if (!row) throw new Error('settings row missing');
-  return row;
 }
