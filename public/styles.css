@@ -507,7 +507,7 @@ button.btn-go { color: var(--go-ink); background: var(--go); border-color: var(-
 .wizard-steps li > a::before,
 .wizard-steps li > span::before { content: counter(wizard-step) "."; font-variant-numeric: tabular-nums; }
 .wizard-steps li.is-current > span { color: var(--primary-ink); background: var(--primary); border-color: var(--primary); font-weight: 700; }
-.wizard-steps li.is-done > a::after { content: "\2713"; font-weight: 700; }
+.wizard-steps li.is-done > a::after { content: "\2713" / ""; font-weight: 700; }
 .wizard .field { margin: var(--space-3) 0; }
 .wizard .field label { margin-top: 0; }
 .wizard details { margin: var(--space-4) 0; }

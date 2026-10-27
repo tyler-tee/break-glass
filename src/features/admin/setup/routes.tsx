@@ -7,6 +7,7 @@ import { PlacesError, geocode } from '../../../services/places/client.js';
 import { describePlacesError, testAnthropicKey, testPlacesKey, type ProbeResult } from '../../../services/keyProbe.js';
 import { placesOf } from '../../../services/resolver.js';
 import { page } from '../../../web/Layout.js';
+import { installState } from '../install.js';
 import type { SecretName } from '../secrets.js';
 import { SettingsValidationError, getSettings, updateSettings, type SettingsPatch } from '../settingsRepo.js';
 import { describeCron } from './cronWords.js';
@@ -23,9 +24,16 @@ const goOf = (v: unknown): Go => (v === 'skip' || v === 'back' || v === 'later' 
 const DEFAULT_HOUSEHOLD = 'Our household';
 const HOUSEHOLD_MAX = 60;
 const EMERGENCY_MAX = 20;
+const KEY_MIN = 20;
 const KEY_MAX = 400;
-// Pasted keys sometimes pick up spaces or line breaks; those would also break HTTP headers.
-const KEY_BAD_CHARS = /[\s\x00-\x1f\x7f]/;
+// Printable ASCII only: pasted keys sometimes pick up spaces, line breaks or invisible characters (zero-width
+// spaces), which would also break HTTP headers.
+const KEY_CHARS = /^[\x21-\x7e]+$/;
+const SHORT_KEY_MESSAGE = 'That key looks too short — copy the whole key and paste it again';
+// Below this length, showing the last four characters would reveal too much of the key.
+const LAST4_MIN_LENGTH = 12;
+type SavedWhich = 'places' | 'anthropic' | 'both';
+const isSavedWhich = (v: string): v is SavedWhich => v === 'places' || v === 'anthropic' || v === 'both';
 const BAD_KEY_MESSAGE = "That doesn't look like a key — paste it again without spaces";
 
 const TIME_ZONES: readonly string[] = (() => {
@@ -83,7 +91,7 @@ const Field: FC<{
 const firstError = (errors: Errors, order: readonly string[]): string | undefined => order.find((f) => errors[f]);
 
 type KeyName = 'places' | 'anthropic';
-type KeyState = { kind: 'env' } | { kind: 'saved'; last4: string } | { kind: 'none' };
+type KeyState = { kind: 'env' } | { kind: 'saved'; last4: string | null } | { kind: 'none' };
 
 export function setupRoutes(deps: ResolvedAppDeps): Hono {
   const { db, env, secrets } = deps;
@@ -94,7 +102,8 @@ export function setupRoutes(deps: ResolvedAppDeps): Hono {
 
   const doneSteps = (): Step[] => STEPS.filter((s) => s !== 'services' && stepDone({ db }, s));
 
-  app.get('/', (c) => c.redirect(resumeTarget({ db }), 302));
+  // A finished install re-runs from the start ("Run setup again"); an unfinished one resumes where it left off.
+  app.get('/', (c) => c.redirect(installState(deps) === 'ready' ? stepPath('welcome') : resumeTarget({ db }), 302));
 
   // ---- Step 1: Welcome / household -------------------------------------------------------------
 
@@ -166,7 +175,18 @@ export function setupRoutes(deps: ResolvedAppDeps): Hono {
     else if (!/^[0-9+\-() ]+$/.test(number)) errors['emergency_number'] = 'Use only digits, spaces, and + - ( ).';
     else if (number.length > EMERGENCY_MAX) errors['emergency_number'] = `Keep the number to ${EMERGENCY_MAX} characters or fewer.`;
     if (Object.keys(errors).length > 0) return welcomePage(c, { name, number }, errors, 400);
-    updateSettings(db, { householdName: name, emergencyNumber: number });
+    try {
+      updateSettings(db, { householdName: name, emergencyNumber: number });
+    } catch (e) {
+      if (!(e instanceof SettingsValidationError)) throw e;
+      // updateSettings re-validates the whole row; a bad value saved elsewhere must not turn into a 500 here.
+      return welcomePage(
+        c,
+        { name, number },
+        { household_name: 'Another setting has a problem, so this could not be saved. Fix it in Settings, then try again.' },
+        400,
+      );
+    }
     return c.redirect(destination('welcome', go), 302);
   });
 
@@ -218,15 +238,22 @@ export function setupRoutes(deps: ResolvedAppDeps): Hono {
   const keyState = (k: KeyName): KeyState => {
     if (secrets.isEnvProvided(KEYS[k].secret)) return { kind: 'env' };
     const v = KEYS[k].get();
-    return v ? { kind: 'saved', last4: v.slice(-4) } : { kind: 'none' };
+    return v ? { kind: 'saved', last4: v.length >= LAST4_MIN_LENGTH ? v.slice(-4) : null } : { kind: 'none' };
   };
 
   const servicesPage = (
     c: Context,
-    opts: { errors?: Errors; probe?: { key: KeyName; result: ProbeResult }; notice?: Notice; status?: Status } = {},
+    opts: {
+      errors?: Errors;
+      probe?: { key: KeyName; result: ProbeResult };
+      notice?: Notice;
+      justSaved?: boolean;
+      status?: Status;
+    } = {},
   ) => {
     const errors = opts.errors ?? {};
     const focus = firstError(errors, KEY_NAMES.map((k) => KEYS[k].field));
+    const next = nextStep('services');
     return render(
       c,
       'services',
@@ -240,6 +267,16 @@ export function setupRoutes(deps: ResolvedAppDeps): Hono {
             Both keys are optional. Without them you can still add places and write protocols by hand. Keys are stored on
             this server and are never shown again after you save them.
           </p>
+        }
+        before={
+          opts.justSaved &&
+          next && (
+            <p class="wizard-continue">
+              <a class="btn" href={stepPath(next)}>
+                Continue
+              </a>
+            </p>
+          )
         }
         after={<form id="svc-aux" method="post" action="/admin/setup/services"></form>}
       >
@@ -262,7 +299,9 @@ export function setupRoutes(deps: ResolvedAppDeps): Hono {
                   {state.kind === 'env'
                     ? 'Set by the server environment'
                     : state.kind === 'saved'
-                      ? `Saved (ends in …${state.last4})`
+                      ? state.last4
+                        ? `Saved (ends in …${state.last4})`
+                        : 'Saved'
                       : 'Not set'}
                 </strong>
               </p>
@@ -316,6 +355,10 @@ export function setupRoutes(deps: ResolvedAppDeps): Hono {
 
   app.get('/services', (c) => {
     const removed = c.req.query('removed') ?? '';
+    const saved = c.req.query('saved') ?? '';
+    if (isSavedWhich(saved)) {
+      return servicesPage(c, { notice: { kind: 'status', text: 'Saved. Use Test to check it, or continue.' }, justSaved: true });
+    }
     const notice: Notice | undefined = isKeyName(removed)
       ? { kind: 'status', text: `${KEYS[removed].legend} removed.` }
       : undefined;
@@ -357,12 +400,18 @@ export function setupRoutes(deps: ResolvedAppDeps): Hono {
       if (secrets.isEnvProvided(def.secret)) continue;
       const value = str(body[def.field]).trim();
       if (value === '') continue; // blank keeps the saved key
-      if (KEY_BAD_CHARS.test(value) || value.length > KEY_MAX) errors[def.field] = BAD_KEY_MESSAGE;
+      if (!KEY_CHARS.test(value) || value.length > KEY_MAX) errors[def.field] = BAD_KEY_MESSAGE;
+      else if (value.length < KEY_MIN) errors[def.field] = SHORT_KEY_MESSAGE;
       else toSave.push({ k, value });
     }
     // Never echo a submitted key: the inputs carry no value attribute, and nothing is saved if any field is bad.
     if (Object.keys(errors).length > 0) return servicesPage(c, { errors, status: 400 });
     for (const { k, value } of toSave) KEYS[k].set(value);
+    // A newly saved key stays on this step so the admin can Test it before moving on.
+    if (go === 'next' && toSave.length > 0) {
+      const which: SavedWhich = toSave.length > 1 ? 'both' : toSave[0]!.k;
+      return c.redirect(`/admin/setup/services?saved=${which}`, 302);
+    }
     return c.redirect(destination('services', go), 302);
   });
 
@@ -584,11 +633,14 @@ export function setupRoutes(deps: ResolvedAppDeps): Hono {
     }
     patch.homeLat = lat;
     patch.homeLng = lng;
+    // Coordinates typed by hand no longer match a label saved by an earlier address lookup.
+    const savedHome = getSettings(db);
+    if (lat !== savedHome.homeLat || lng !== savedHome.homeLng) patch.homeLabel = null;
 
     if (values.radius !== '') {
       const r = Number(values.radius);
       if (!(Number.isFinite(r) && r > 0 && r <= 500)) {
-        errors['default_radius_mi'] = 'Search radius must be a number of miles greater than 0, like 15.';
+        errors['default_radius_mi'] = 'Search radius must be a number of miles above 0 and up to 500, like 15.';
       } else patch.defaultRadiusMi = r;
     }
     if (values.tz !== '') {

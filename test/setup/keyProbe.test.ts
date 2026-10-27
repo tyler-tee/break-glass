@@ -1,10 +1,8 @@
 import { APIConnectionError, APIError } from '@anthropic-ai/sdk';
 import { describe, expect, it, vi } from 'vitest';
-import { placesUsage } from '../../src/db/schema.js';
 import { loadEnv } from '../../src/env.js';
 import { LlmValidationError, type LlmProvider } from '../../src/services/llm/provider.js';
 import { testAnthropicKey, testPlacesKey } from '../../src/services/keyProbe.js';
-import { createTestDb } from '../helpers/testDb.js';
 
 const PLACES_KEY = 'AIzaSyPROBE-test-key-1234';
 const ANTHROPIC_KEY = 'sk-ant-api03-probe-test-key-9876';
@@ -18,8 +16,8 @@ const jsonFetch = (status: number, body: unknown) =>
   );
 
 describe('testPlacesKey', () => {
-  it('ok on a 200 searchText and does not touch placesUsage', async () => {
-    const db = createTestDb();
+  // Cap safety (no placesUsage writes) is pinned at the route level in wizard.test.ts.
+  it('ok on a 200 IDs-only searchText', async () => {
     const fetch = jsonFetch(200, { places: [{ id: 'ChIJ-probe' }] });
     const result = await testPlacesKey(PLACES_KEY, { fetch: fetch as unknown as typeof globalThis.fetch });
     expect(result).toEqual({ ok: true });
@@ -30,7 +28,6 @@ describe('testPlacesKey', () => {
     expect(headers['X-Goog-Api-Key']).toBe(PLACES_KEY);
     // IDs-only field mask: the cheapest Text Search request.
     expect(headers['X-Goog-FieldMask']).toBe('places.id');
-    expect(db.select().from(placesUsage).all()).toEqual([]);
   });
 
   it('403 is reported in plain words as rejected by Google, without the key', async () => {

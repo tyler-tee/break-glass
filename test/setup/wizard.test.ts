@@ -2,7 +2,7 @@ import { APIError } from '@anthropic-ai/sdk';
 import { eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
-import { categories, locations, protocols, protocolVersions, settings } from '../../src/db/schema.js';
+import { categories, locations, placesUsage, protocols, protocolVersions, settings } from '../../src/db/schema.js';
 import { loadEnv } from '../../src/env.js';
 import { hashPassword } from '../../src/features/admin/auth.js';
 import { createSecretsStore } from '../../src/features/admin/secrets.js';
@@ -112,6 +112,17 @@ describe('wizard routes', () => {
     expect(res.headers.get('location')).toBe('/admin/setup/categories');
   });
 
+  it('a finished install re-runs setup from the start; an unfinished one resumes', async () => {
+    const { get, db } = await harness();
+    db.update(settings).set({ householdName: 'The Smiths', homeLat: 40, homeLng: -111 }).run();
+    let res = await get('/admin/setup');
+    expect(res.headers.get('location')).toBe('/admin/setup/categories');
+    db.update(settings).set({ setupCompletedAt: new Date() }).run();
+    res = await get('/admin/setup');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/admin/setup/welcome');
+  });
+
   it('requires login and rejects cross-origin posts', async () => {
     const { app, post } = await harness();
     const anon = await app.request('/admin/setup/welcome');
@@ -169,7 +180,16 @@ describe('wizard routes', () => {
     expect(getSettings(db).householdName).toBeNull();
   });
 
-  it('Back, Skip for now and Finish later redirect without saving', async () => {
+  it('household save re-renders with an alert instead of a 500 when another setting is invalid', async () => {
+    const { post, db } = await harness();
+    db.update(settings).set({ locationRefreshCron: 'bogus' }).where(eq(settings.id, 1)).run();
+    const res = await post('/admin/setup/welcome', { household_name: 'The Smiths', emergency_number: '911' });
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/role="alert"[^>]*>[^<]*Settings/);
+    expect(getSettings(db).householdName).toBeNull();
+  });
+
+  it('Back and Skip for now redirect without saving; Finish later saves and leaves', async () => {
     const { post, db } = await harness();
     const fields = { household_name: 'Ignored', emergency_number: '911' };
     let res = await post('/admin/setup/welcome', { ...fields, go: 'skip' });
@@ -215,18 +235,64 @@ describe('wizard routes', () => {
 
     it('saves trimmed keys and shows only the last four characters', async () => {
       const { post, get, secrets } = await harness();
-      const res = await post('/admin/setup/services', { places_key: '  AIzaSyNEW-places-1a2b  ', anthropic_key: 'sk-ant-new-key-9z8y' });
+      const res = await post('/admin/setup/services', { places_key: '  AIzaSyNEW-places-1a2b  ', anthropic_key: 'sk-ant-new-test-key-9z8y' });
       expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe('/admin/setup/services?saved=both');
       expect(secrets.getPlacesKey()).toBe('AIzaSyNEW-places-1a2b');
-      expect(secrets.getAnthropicKey()).toBe('sk-ant-new-key-9z8y');
+      expect(secrets.getAnthropicKey()).toBe('sk-ant-new-test-key-9z8y');
 
       const html = await (await get('/admin/setup/services')).text();
       expect(html).toContain('Saved (ends in …1a2b)');
       expect(html).toContain('Saved (ends in …9z8y)');
       expect(html).not.toContain('AIzaSyNEW-places');
-      expect(html).not.toContain('sk-ant-new-key');
+      expect(html).not.toContain('sk-ant-new-test-key');
       expect(html).toMatch(/<input[^>]*type="password"[^>]*name="places_key"[^>]*autocomplete="off"/);
       expect(html).toMatch(/<input[^>]*type="password"[^>]*name="anthropic_key"[^>]*autocomplete="off"/);
+    });
+
+    it('saving a new key stays on services with Test and a Continue link', async () => {
+      const { post, get, secrets } = await harness();
+      const res = await post('/admin/setup/services', { places_key: 'AIzaSyFRESH-places-key-4444', anthropic_key: '' });
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe('/admin/setup/services?saved=places');
+      expect(secrets.getPlacesKey()).toBe('AIzaSyFRESH-places-key-4444');
+      const html = await (await get('/admin/setup/services?saved=places')).text();
+      expect(html).toMatch(/role="status"[^>]*>Saved\. Use Test to check it, or continue\.</);
+      expect(html).toMatch(/<button[^>]*form="svc-aux"[^>]*name="test"[^>]*value="places"/);
+      expect(html).toMatch(/<a class="btn" href="\/admin\/setup\/home">\s*Continue\s*<\/a>/);
+      // Only whitelisted values show the notice.
+      const other = await (await get('/admin/setup/services?saved=%3Cscript%3E')).text();
+      expect(other).not.toContain('Use Test to check it');
+      expect(other).not.toContain('<script>');
+    });
+
+    it('Save and continue with blank fields advances to Home', async () => {
+      const { post } = await harness();
+      const res = await post('/admin/setup/services', { places_key: '', anthropic_key: '' });
+      expect(res.headers.get('location')).toBe('/admin/setup/home');
+    });
+
+    it('rejects zero-width-space and too-short keys without echoing them', async () => {
+      const { post, secrets } = await harness();
+      let res = await post('/admin/setup/services', { places_key: 'AIzaSyZWSP\u200bkey-000000001', anthropic_key: '' });
+      expect(res.status).toBe(400);
+      let html = await res.text();
+      expect(html).toContain('That doesn&#39;t look like a key — paste it again without spaces');
+      expect(html).not.toContain('SyZWSP');
+      res = await post('/admin/setup/services', { places_key: 'AIzaSyTINY-12', anthropic_key: '' });
+      expect(res.status).toBe(400);
+      html = await res.text();
+      expect(html).toMatch(/role="alert"[^>]*>[^<]*too short/);
+      expect(html).not.toContain('SyTINY');
+      expect(secrets.getPlacesKey()).toBeUndefined();
+    });
+
+    it('a short stored key shows only "Saved", without its last four', async () => {
+      const { get, secrets } = await harness();
+      secrets.setAnthropicKey('short-k9x7');
+      const html = await (await get('/admin/setup/services')).text();
+      expect(html).toContain('<strong>Saved</strong>');
+      expect(html).not.toContain('k9x7');
     });
 
     it('rejects a key with whitespace or control characters and never echoes it', async () => {
@@ -242,7 +308,7 @@ describe('wizard routes', () => {
         expect(secrets.getPlacesKey()).toBeUndefined();
       }
       // One bad field saves nothing, not even the good one.
-      const res = await post('/admin/setup/services', { places_key: 'AIzaSyGOOD-0004', anthropic_key: 'sk-ant bad' });
+      const res = await post('/admin/setup/services', { places_key: 'AIzaSyGOOD-key-000004', anthropic_key: 'sk-ant bad' });
       expect(res.status).toBe(400);
       expect(secrets.getPlacesKey()).toBeUndefined();
     });
@@ -284,6 +350,19 @@ describe('wizard routes', () => {
       expect(secrets.getPlacesKey()).toBe(key);
       const headers = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1].headers as Record<string, string>;
       expect(headers['X-Goog-Api-Key']).toBe(key);
+    });
+
+    it('Test does not count against the monthly Places cap, even when the cap is reached', async () => {
+      const fetch = vi.fn(async () => new Response(JSON.stringify({ places: [{ id: 'x' }] }), { status: 200 })) as unknown as typeof globalThis.fetch;
+      const { post, secrets, db, env } = await harness({ fetch });
+      const month = new Date().toISOString().slice(0, 7);
+      const at = new Date('2026-01-01T00:00:00Z');
+      db.insert(placesUsage).values({ month, calls: env.PLACES_MONTHLY_CAP, updatedAt: at }).run();
+      secrets.setPlacesKey('AIzaSyCAPPED-key-000123');
+      const html = await (await post('/admin/setup/services', { test: 'places' })).text();
+      expect(html).toMatch(/role="status"[^>]*>[^<]*works/);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(db.select().from(placesUsage).all()).toEqual([{ month, calls: env.PLACES_MONTHLY_CAP, updatedAt: at }]);
     });
 
     it('Test reports success with role=status', async () => {
@@ -364,7 +443,7 @@ describe('wizard routes', () => {
       expect(res.status).toBe(400);
       const html = await res.text();
       expect(html).toMatch(/role="alert"[^>]*>[^<]*Latitude/);
-      expect(html).toMatch(/role="alert"[^>]*>[^<]*radius/i);
+      expect(html).toMatch(/role="alert"[^>]*>[^<]*radius[^<]*500/i);
       expect(html).toMatch(/role="alert"[^>]*>[^<]*time zone/i);
       expect(html).toMatch(/role="alert"[^>]*>[^<]*schedule/i);
       // The submitted values are kept for correction, and the Advanced section opens to show its error.
@@ -395,6 +474,16 @@ describe('wizard routes', () => {
       const after = await (await get('/admin/setup/home?found=1')).text();
       expect(after).toMatch(/role="status"/);
       expect(after).toContain('value="40.1"');
+    });
+
+    it('manual coordinates that differ from a looked-up home clear its label; unchanged ones keep it', async () => {
+      const { post, db } = await harness();
+      db.update(settings).set({ homeLabel: '1 Main St', homeLat: 40.1, homeLng: -111.2 }).where(eq(settings.id, 1)).run();
+      const base = { default_radius_mi: '15', home_tz: 'America/Denver', location_refresh_cron: '0 3 * * 0', protocol_refresh_cron: '0 4 1 * *' };
+      expect((await post('/admin/setup/home', { ...base, home_lat: '40.1', home_lng: '-111.2' })).status).toBe(302);
+      expect(getSettings(db).homeLabel).toBe('1 Main St');
+      expect((await post('/admin/setup/home', { ...base, home_lat: '41', home_lng: '-111.2' })).status).toBe(302);
+      expect(getSettings(db)).toMatchObject({ homeLabel: null, homeLat: 41 });
     });
 
     it('lookup without a key or with a blank address explains in plain words', async () => {
