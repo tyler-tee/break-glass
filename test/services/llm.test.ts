@@ -18,8 +18,8 @@ const schema = z.object({ answer: z.number() });
 const req = { model: 'm', system: 's', prompt: 'p', schema };
 
 function mockClient(response: unknown) {
-  const parse = vi.fn(async (_params: unknown) => response);
-  return { client: { messages: { parse } } as unknown as Anthropic, parse };
+  const create = vi.fn(async (_params: unknown) => response);
+  return { client: { messages: { create } } as unknown as Anthropic, create };
 }
 
 describe('parseOrReject', () => {
@@ -80,48 +80,56 @@ describe('anthropicProvider', () => {
     const { client } = mockClient({
       stop_reason: 'refusal',
       stop_details: { category: 'cyber' },
-      content: [],
-      parsed_output: null,
+      content: [{ type: 'text', text: '{"answ' }],
     });
     const err = await anthropicProvider(client).generateJson(req).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(LlmRefusalError);
     expect((err as LlmRefusalError).category).toBe('cyber');
   });
 
-  it('returns parsed_output when present', async () => {
+  it('returns validated value from text blocks', async () => {
     const { client } = mockClient({
       stop_reason: 'end_turn',
-      content: [],
-      parsed_output: { answer: 4 },
+      content: [{ type: 'text', text: '{"answer":4}' }],
     });
     await expect(anthropicProvider(client).generateJson(req)).resolves.toEqual({ answer: 4 });
   });
 
-  it('falls back to text parsing and rejects malformed output', async () => {
+  it('malformed model text becomes LlmValidationError with raw text', async () => {
     const { client } = mockClient({
       stop_reason: 'end_turn',
-      content: [{ type: 'text', text: 'oops' }],
-      parsed_output: null,
+      content: [{ type: 'text', text: '{"nope":' }],
     });
     const err = await anthropicProvider(client).generateJson(req).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(LlmValidationError);
-    expect((err as LlmValidationError).raw).toBe('oops');
+    expect((err as LlmValidationError).raw).toBe('{"nope":');
+  });
+
+  it('truncated output at max_tokens is LlmValidationError', async () => {
+    const { client } = mockClient({
+      stop_reason: 'max_tokens',
+      content: [{ type: 'text', text: '{"answer":' }],
+    });
+    const err = await anthropicProvider(client).generateJson(req).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(LlmValidationError);
+    expect((err as LlmValidationError).raw).toBe('{"answer":');
+    expect((err as Error).message).toContain('output truncated at max_tokens');
   });
 
   it('passes model, system, prompt, max_tokens and effort', async () => {
-    const { client, parse } = mockClient({
+    const { client, create } = mockClient({
       stop_reason: 'end_turn',
-      content: [],
-      parsed_output: { answer: 1 },
+      content: [{ type: 'text', text: '{"answer":1}' }],
     });
     await anthropicProvider(client).generateJson({ ...req, maxTokens: 123, effort: 'high' });
-    const arg = parse.mock.calls[0]![0] as Record<string, any>;
+    const arg = create.mock.calls[0]![0] as Record<string, any>;
     expect(arg.model).toBe('m');
     expect(arg.system).toBe('s');
     expect(arg.messages).toEqual([{ role: 'user', content: 'p' }]);
     expect(arg.max_tokens).toBe(123);
     expect(arg.output_config.effort).toBe('high');
-    expect(arg.output_config.format).toBeDefined();
+    expect(arg.output_config.format.type).toBe('json_schema');
+    expect(arg.output_config.format).not.toHaveProperty('parse');
     expect(arg).not.toHaveProperty('tool_choice');
     expect(arg).not.toHaveProperty('thinking');
     expect(arg).not.toHaveProperty('temperature');

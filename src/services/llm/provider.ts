@@ -16,8 +16,9 @@ export class LlmValidationError extends Error {
   constructor(
     public raw: string,
     public issues: unknown,
+    reason?: string,
   ) {
-    super(`LLM output failed validation: ${raw.slice(0, 200)}`);
+    super(`${reason ?? 'LLM output failed validation'}: ${raw.slice(0, 200)}`);
     this.name = 'LlmValidationError';
   }
 }
