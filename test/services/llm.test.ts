@@ -144,4 +144,10 @@ describe('createProvider', () => {
     );
     expect(createProvider({ LLM_PROVIDER: 'anthropic', LLM_API_KEY: 'k' })).not.toBeNull();
   });
+
+  it('with LLM_PROVIDER unset, is on exactly when a key is present', () => {
+    expect(createProvider({ LLM_PROVIDER: undefined, LLM_API_KEY: undefined })).toBeNull();
+    expect(createProvider({ LLM_PROVIDER: undefined, LLM_API_KEY: 'k' })).not.toBeNull();
+    expect(createProvider({ LLM_PROVIDER: 'none', LLM_API_KEY: 'k' })).toBeNull();
+  });
 });

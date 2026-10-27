@@ -6,10 +6,12 @@ const posInt = (def: number) => z.coerce.number().int().positive().default(def);
 const envSchema = z.object({
   PORT: posInt(3000),
   DATABASE_PATH: z.string().default('./data/app.db'),
-  ADMIN_PASSWORD_HASH: z.string().min(1),
-  SESSION_SECRET: z.string().min(32),
+  // Optional for zero-config installs: the admin claims the install in the browser and these live in the DB.
+  ADMIN_PASSWORD_HASH: z.string().min(1).optional(),
+  SESSION_SECRET: z.string().min(32).optional(),
   GOOGLE_PLACES_API_KEY: z.string().optional(),
-  LLM_PROVIDER: z.enum(['anthropic', 'none']).default('none'),
+  // Unset means "on when an Anthropic key exists" (env LLM_API_KEY or saved in the DB); 'none' forces it off.
+  LLM_PROVIDER: z.enum(['anthropic', 'none']).optional(),
   LLM_API_KEY: z.string().optional(),
   LLM_EXTRACT_MODEL: z.string().default('claude-haiku-5-5'),
   LLM_DRAFT_MODEL: z.string().default('claude-opus-5-5'),

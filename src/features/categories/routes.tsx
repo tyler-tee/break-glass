@@ -5,6 +5,7 @@ import { page } from '../../web/Layout.js';
 import { budgetExhaustedPage, placesErrorPage } from '../../web/placesErrorPage.js';
 import { BudgetExhausted, newPlacesBudget } from '../../services/places/budget.js';
 import { PlacesError } from '../../services/places/client.js';
+import { extractOf, placesOf } from '../../services/resolver.js';
 import { NoHomeLocation, runDiscovery } from '../locations/discovery.js';
 import { CategoryError, createCategory, deleteCategory, getCategory, listCategories, updateCategory } from './repo.js';
 
@@ -155,13 +156,15 @@ export function categoriesRoutes(deps: AppDeps): Hono {
     const id = Number(c.req.param('id'));
     const category = getCategory(db, id);
     if (!category) return c.notFound();
-    if (!deps.places) return listPage(c, { error: 'Set GOOGLE_PLACES_API_KEY to enable discovery', status: 400 });
+    const places = placesOf(deps);
+    if (!places) return listPage(c, { error: 'Set GOOGLE_PLACES_API_KEY to enable discovery', status: 400 });
+    const extract = extractOf(deps);
     try {
       const report = await runDiscovery(db, id, {
-        places: { ...deps.places, budget: newPlacesBudget(db, deps.env, deps.now) },
+        places: { ...places, budget: newPlacesBudget(db, deps.env, deps.now) },
         now: deps.now ?? (() => new Date()),
         log: console,
-        ...(deps.extract ? { extract: deps.extract } : {}),
+        ...(extract ? { extract } : {}),
       });
       // runDiscovery reports budget stops instead of throwing; with no calls made there is nothing to show.
       if (report.stoppedEarly && report.callsUsed === 0) return budgetExhaustedPage(c, report.stopReason ?? 'run');

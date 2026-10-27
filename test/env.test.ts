@@ -4,8 +4,15 @@ import path from 'node:path';
 import { expect, it } from 'vitest';
 import { loadDotEnvFiles, loadEnv, parseDotEnv } from '../src/env.js';
 
-it('rejects missing SESSION_SECRET', () =>
-  expect(() => loadEnv({ ADMIN_PASSWORD_HASH: 'x' })).toThrow(/SESSION_SECRET/));
+it('allows missing admin hash and session secret', () => {
+  const e = loadEnv({});
+  expect(e.ADMIN_PASSWORD_HASH).toBeUndefined();
+  expect(e.SESSION_SECRET).toBeUndefined();
+  expect(e.LLM_PROVIDER).toBeUndefined();
+});
+
+it('still rejects a too-short SESSION_SECRET when one is given', () =>
+  expect(() => loadEnv({ SESSION_SECRET: 'short' })).toThrow(/SESSION_SECRET/));
 
 it('applies defaults', () => {
   const e = loadEnv({ SESSION_SECRET: 's'.repeat(32), ADMIN_PASSWORD_HASH: 'x' });

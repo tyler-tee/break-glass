@@ -3,6 +3,7 @@ import { raw } from 'hono/html';
 import type { AppDeps } from '../../app.js';
 import { slugify } from '../../domain/slug.js';
 import { LlmRefusalError, LlmValidationError } from '../../services/llm/provider.js';
+import { llmOf } from '../../services/resolver.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
 import { WarningBadge } from '../../web/components/WarningBadge.js';
 import { renderMarkdown, safeHref } from '../../web/format.js';
@@ -331,7 +332,8 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
     if (!getProtocol(db, id)) return c.notFound();
     const body = await c.req.parseBody();
     const urls = str(body['source_urls']);
-    if (!deps.llm) {
+    const llm = llmOf(deps);
+    if (!llm) {
       return detailPage(c, id, {
         error: 'Set LLM_PROVIDER and LLM_API_KEY to enable drafting',
         status: 503,
@@ -340,7 +342,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
     }
     try {
       await generateDraft(db, id, urls.split(/\r?\n/), {
-        llm: deps.llm,
+        llm,
         fetch: deps.siteFetch ?? globalThis.fetch,
         model: deps.env.LLM_DRAFT_MODEL,
         allowlist,

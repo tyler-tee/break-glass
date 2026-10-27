@@ -56,9 +56,10 @@ export async function readSession(c: Context, secret: string, now: Date): Promis
   }
 }
 
-export function requireAdmin(secret: string, now: () => Date): MiddlewareHandler {
+/** getSecret is called on every request so a rotated session secret takes effect immediately. */
+export function requireAdmin(getSecret: () => string, now: () => Date): MiddlewareHandler {
   return async (c, next) => {
-    if (!(await readSession(c, secret, now()))) {
+    if (!(await readSession(c, getSecret(), now()))) {
       return c.redirect(`/admin/login?next=${encodeURIComponent(c.req.path)}`, 302);
     }
     await next();

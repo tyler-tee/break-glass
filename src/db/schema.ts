@@ -19,6 +19,10 @@ export const settings = sqliteTable(
     defaultRadiusMi: real('default_radius_mi').default(15),
     locationRefreshCron: text('location_refresh_cron').default('0 3 * * 0'),
     protocolRefreshCron: text('protocol_refresh_cron').default('0 4 1 * *'),
+    householdName: text('household_name'),
+    emergencyNumber: text('emergency_number').notNull().default('911'),
+    // Set when the First Run wizard finishes; null means setup is incomplete.
+    setupCompletedAt: integer('setup_completed_at', { mode: 'timestamp_ms' }),
   },
   () => [check('settings_single_row', sql`id = 1`)],
 );
@@ -150,5 +154,12 @@ export const protocolSources = sqliteTable('protocol_sources', {
 export const placesUsage = sqliteTable('places_usage', {
   month: text('month').primaryKey(),
   calls: integer('calls').notNull().default(0),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+// Key/value store for secrets set from the admin UI. Env vars always take precedence (see features/admin/secrets.ts).
+export const appSecrets = sqliteTable('app_secrets', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });

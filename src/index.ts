@@ -7,9 +7,9 @@ import { loadDotEnvFiles, loadEnv } from './env.js';
 import { recheckProtocols } from './jobs/recheckProtocols.js';
 import { refreshLocations } from './jobs/refreshLocations.js';
 import { startScheduler } from './jobs/scheduler.js';
-import { makeExtractor } from './services/llm/extract.js';
-import { createProvider } from './services/llm/index.js';
+import { createSecretsStore } from './features/admin/secrets.js';
 import { newPlacesBudget } from './services/places/budget.js';
+import { makeServiceResolver } from './services/resolver.js';
 import { createShutdown } from './shutdown.js';
 
 loadDotEnvFiles();
@@ -18,28 +18,29 @@ const env = loadEnv(process.env);
 const db = openDb(env.DATABASE_PATH);
 runMigrations(db);
 ensureSettingsRow(db);
-const places = env.GOOGLE_PLACES_API_KEY
-  ? { fetch: globalThis.fetch, apiKey: env.GOOGLE_PLACES_API_KEY }
-  : undefined;
-
-const llm = createProvider(env);
-const extract = llm
-  ? makeExtractor({ llm, fetch: globalThis.fetch, model: env.LLM_EXTRACT_MODEL, log: console })
-  : undefined;
+const secrets = createSecretsStore(db, env);
+secrets.getSessionSecret(); // without SESSION_SECRET in env, generate and persist one on first boot
+const resolve = makeServiceResolver(db, env, secrets, { fetch: globalThis.fetch, log: console });
+if (env.LLM_PROVIDER === 'anthropic' && !secrets.getAnthropicKey()) {
+  console.warn('LLM_PROVIDER=anthropic but no Anthropic key is set; drafting and extraction stay off until one is saved');
+}
 
 const scheduler = startScheduler({
   db,
   jobs: {
-    refreshLocations: () =>
-      places
-        ? refreshLocations(db, {
-            places: { ...places, budget: newPlacesBudget(db, env) },
-            env,
-            now: () => new Date(),
-            log: console,
-            ...(extract ? { extract } : {}),
-          })
-        : Promise.resolve({ skipped: 'GOOGLE_PLACES_API_KEY not set' }),
+    // Resolve services at run time so a key saved in the admin UI is used by the next scheduled run.
+    refreshLocations: () => {
+      const places = resolve.places();
+      if (!places) return Promise.resolve({ skipped: 'GOOGLE_PLACES_API_KEY not set' });
+      const extract = resolve.extract();
+      return refreshLocations(db, {
+        places: { ...places, budget: newPlacesBudget(db, env) },
+        env,
+        now: () => new Date(),
+        log: console,
+        ...(extract ? { extract } : {}),
+      });
+    },
     recheckProtocols: () =>
       recheckProtocols(db, { fetch: globalThis.fetch, now: () => new Date(), log: console }),
   },
@@ -49,11 +50,10 @@ const scheduler = startScheduler({
 const app = createApp({
   db,
   env,
-  places,
+  secrets,
+  resolve,
   scheduler,
   siteFetch: globalThis.fetch,
-  ...(extract ? { extract } : {}),
-  ...(llm ? { llm } : {}),
 });
 
 const server = serve({ fetch: app.fetch, port: env.PORT, hostname: '0.0.0.0' });

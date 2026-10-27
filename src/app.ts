@@ -10,16 +10,28 @@ import { apiRoutes } from './features/api/routes.js';
 import type { SchedulerHandle } from './jobs/scheduler.js';
 import { adminRoutes } from './features/admin/routes.js';
 import { registerAssets } from './web/assets.js';
+import { createSecretsStore, type SecretsStore } from './features/admin/secrets.js';
+import { makeServiceResolver, type PlacesDep, type ServiceResolver } from './services/resolver.js';
 
 export type AppDeps = { db: Db; env: Env; now?: () => Date; scheduler?: SchedulerHandle;
-  places?: { fetch: typeof fetch; apiKey: string };
+  // Static service deps (tests inject fakes); read them via placesOf/llmOf/extractOf so the resolver wins.
+  places?: PlacesDep;
   extract?: Extractor;
   llm?: LlmProvider;
   siteFetch?: typeof fetch;
   lookup?: LookupFn;
+  secrets?: SecretsStore;
+  resolve?: ServiceResolver;
 };
 
-export function createApp(deps: AppDeps): Hono {
+/** AppDeps after createApp has filled in the secrets store and service resolver. */
+export type ResolvedAppDeps = AppDeps & { secrets: SecretsStore; resolve: ServiceResolver };
+
+export function createApp(input: AppDeps): Hono {
+  // Fill in place (not a copy) so sub-routers and the caller share one deps object, as before.
+  input.secrets ??= createSecretsStore(input.db, input.env);
+  input.resolve ??= makeServiceResolver(input.db, input.env, input.secrets);
+  const deps = input as ResolvedAppDeps;
   const app = new Hono();
   app.get('/health', (c) => {
     try {

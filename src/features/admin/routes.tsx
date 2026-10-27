@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { deleteCookie } from 'hono/cookie';
-import type { AppDeps } from '../../app.js';
+import type { ResolvedAppDeps } from '../../app.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
 import { categoriesRoutes } from '../categories/routes.js';
@@ -16,8 +16,8 @@ const JOB_NAMES: readonly string[] = ['refreshLocations', 'recheckProtocols'];
 const safeNext = (next: unknown): string =>
   typeof next === 'string' && (next === '/admin' || next.startsWith('/admin/')) ? next : '/admin';
 
-export function adminRoutes(deps: AppDeps): Hono {
-  const { env } = deps;
+export function adminRoutes(deps: ResolvedAppDeps): Hono {
+  const { env, secrets } = deps;
   const now = deps.now ?? (() => new Date());
   const app = new Hono();
 
@@ -45,14 +45,15 @@ export function adminRoutes(deps: AppDeps): Hono {
     const body = await c.req.parseBody();
     const next = safeNext(body['next']);
     const password = typeof body['password'] === 'string' ? body['password'] : '';
-    if (!(await verifyPassword(password, env.ADMIN_PASSWORD_HASH))) {
+    // No hash yet (unclaimed install) verifies against '' and always fails.
+    if (!(await verifyPassword(password, secrets.getAdminHash() ?? ''))) {
       return loginPage(c, next, 401);
     }
-    await createSession(c, env.SESSION_SECRET, now());
+    await createSession(c, secrets.getSessionSecret(), now());
     return c.redirect(next, 302);
   });
 
-  app.use('*', requireAdmin(env.SESSION_SECRET, now));
+  app.use('*', requireAdmin(() => secrets.getSessionSecret(), now));
   app.use('*', requireSameOrigin);
 
   app.get('/', (c) => {
