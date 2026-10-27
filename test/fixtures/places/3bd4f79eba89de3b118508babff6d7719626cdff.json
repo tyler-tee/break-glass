@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "url": "https://places.googleapis.com/v1/places/ChIJnear",
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"id\":\"ChIJnear\",\"displayName\":{\"text\":\"Near Dental Group\",\"languageCode\":\"en\"},\"formattedAddress\":\"100 S Main St, Salt Lake City, UT 84101, USA\",\"nationalPhoneNumber\":\"(801) 555-0100\",\"websiteUri\":\"https://near-dental.example\",\"location\":{\"latitude\":40.775,\"longitude\":-111.891},\"rating\":4.6,\"userRatingCount\":120,\"businessStatus\":\"OPERATIONAL\",\"regularOpeningHours\":{\"periods\":[{\"open\":{\"day\":1,\"hour\":8,\"minute\":0},\"close\":{\"day\":1,\"hour\":17,\"minute\":0}},{\"open\":{\"day\":2,\"hour\":8,\"minute\":0},\"close\":{\"day\":2,\"hour\":17,\"minute\":0}},{\"open\":{\"day\":3,\"hour\":8,\"minute\":0},\"close\":{\"day\":3,\"hour\":17,\"minute\":0}},{\"open\":{\"day\":4,\"hour\":8,\"minute\":0},\"close\":{\"day\":4,\"hour\":17,\"minute\":0}},{\"open\":{\"day\":5,\"hour\":8,\"minute\":0},\"close\":{\"day\":5,\"hour\":17,\"minute\":0}}],\"weekdayDescriptions\":[\"Monday: 8:00 AM – 5:00 PM\",\"Tuesday: 8:00 AM – 5:00 PM\",\"Wednesday: 8:00 AM – 5:00 PM\",\"Thursday: 8:00 AM – 5:00 PM\",\"Friday: 8:00 AM – 5:00 PM\"]}}"
+}

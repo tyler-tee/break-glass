@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "url": "https://places.googleapis.com/v1/places/ChIJgone",
+  "status": 404,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"error\":{\"code\":404,\"message\":\"Place not found\",\"status\":\"NOT_FOUND\"}}"
+}
