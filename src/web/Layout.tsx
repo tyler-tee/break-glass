@@ -26,6 +26,9 @@ h3 a{display:inline-block;padding:10px 0}
 .badge{display:inline-block;padding:6px 10px;border-radius:6px;font-weight:700}
 .badge-warn{background:#ffd800;color:#111}
 .badge-closed{background:#b00020;color:#fff}
+.admin-nav ul{list-style:none;margin:0;padding:0}
+.admin-nav li a{display:inline-block;padding:10px 0}
+.admin-nav button{padding:0 20px}
 `;
 
 export const Layout: FC<PropsWithChildren<{ title: string }>> = ({ title, children }) => (
@@ -47,7 +50,7 @@ export const Layout: FC<PropsWithChildren<{ title: string }>> = ({ title, childr
   </html>
 );
 
-export function page(c: Context, title: string, body: Child, status: 200 | 404 = 200) {
+export function page(c: Context, title: string, body: Child, status: 200 | 401 | 404 = 200) {
   c.status(status);
   return c.html(html`<!DOCTYPE html>${(<Layout title={title}>{body}</Layout>)}`);
 }
