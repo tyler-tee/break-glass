@@ -35,15 +35,11 @@ export function buildDraftPrompt(title: string, sources: DraftSource[]): { syste
   return { system: SYSTEM, prompt: `Protocol title: ${title}\n\nSources:\n\n${body}` };
 }
 
-function hasAllHeadingsInOrder(body: string): boolean {
-  const lines = body.split(/\r?\n/).map((l) => l.trimEnd());
-  let from = 0;
-  for (const h of SOP_HEADINGS) {
-    const i = lines.indexOf(h, from);
-    if (i < 0) return false;
-    from = i + 1;
-  }
-  return true;
+function level2Headings(body: string): string[] {
+  return body
+    .split(/\r?\n/)
+    .map((l) => l.trimEnd())
+    .filter((l) => /^##\s/.test(l));
 }
 
 export async function draftProtocol(
@@ -60,8 +56,14 @@ export async function draftProtocol(
     maxTokens: 4096,
     effort: 'high',
   });
-  if (!hasAllHeadingsInOrder(bodyMd)) {
-    throw new LlmValidationError(bodyMd, null, 'draft missing required SOP headings');
-  }
-  return bodyMd;
+  const found = level2Headings(bodyMd);
+  if (found.length === SOP_HEADINGS.length && SOP_HEADINGS.every((h, i) => found[i] === h)) return bodyMd;
+  const missing = SOP_HEADINGS.some((h) => !found.includes(h));
+  throw new LlmValidationError(
+    bodyMd,
+    null,
+    missing
+      ? 'draft missing required SOP headings'
+      : `draft has unexpected level-2 headings: ${found.join(' | ')}`,
+  );
 }

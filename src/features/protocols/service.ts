@@ -75,6 +75,7 @@ export async function generateDraft(
     const page = await fetchPage(url, {
       fetch: deps.fetch,
       log: deps.log,
+      allowHost: (u) => isAllowedSource(u, deps.allowlist),
       ...(deps.lookup ? { lookup: deps.lookup } : {}),
     });
     if (!page) throw new ProtocolError('source_unreachable', 'Source could not be fetched', url);

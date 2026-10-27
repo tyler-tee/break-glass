@@ -147,11 +147,15 @@ async function readCapped(res: Response, maxChars: number): Promise<string> {
   return out.slice(0, maxChars);
 }
 
-type FetchCtx = { fetch: typeof fetch; timeoutMs: number; lookup: LookupFn; log?: Logger };
+type FetchCtx = { fetch: typeof fetch; timeoutMs: number; lookup: LookupFn; log?: Logger; allowHost?: (url: URL) => boolean };
 
 async function fetchHtml(startUrl: string, ctx: FetchCtx): Promise<string | null> {
   let current = new URL(startUrl);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (ctx.allowHost && !ctx.allowHost(current)) {
+      ctx.log?.warn(`blocked by allowlist: ${current.href}`);
+      return null;
+    }
     if (!(await isSafeTarget(current, ctx.lookup))) {
       ctx.log?.warn(`blocked unsafe target: ${current.href}`);
       return null;
@@ -238,13 +242,20 @@ const MAX_PAGE_CHARS = 60_000;
 
 export async function fetchPage(
   url: string,
-  deps: { fetch: typeof fetch; lookup?: LookupFn; timeoutMs?: number; log?: Logger },
+  deps: {
+    fetch: typeof fetch;
+    lookup?: LookupFn;
+    timeoutMs?: number;
+    log?: Logger;
+    allowHost?: (url: URL) => boolean;
+  },
 ): Promise<{ url: string; text: string; title: string | null } | null> {
   const ctx: FetchCtx = {
     fetch: deps.fetch,
     timeoutMs: deps.timeoutMs ?? 10_000,
     lookup: deps.lookup ?? defaultLookup,
     ...(deps.log ? { log: deps.log } : {}),
+    ...(deps.allowHost ? { allowHost: deps.allowHost } : {}),
   };
   try {
     const html = await fetchHtml(url, ctx);

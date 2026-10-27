@@ -105,6 +105,56 @@ describe('generateDraft', () => {
   });
 });
 
+describe('draft safety', () => {
+  const stub = (bodyMd: string): LlmProvider => ({ generateJson: async (req) => req.schema.parse({ bodyMd }) });
+  const good = SOP_HEADINGS.map((h) => `${h}
+text`).join('\n\n');
+
+  it('draft with an extra ## Sources heading is rejected', async () => {
+    const p = choking();
+    await expect(generateDraft(db, p.id, [RC], deps({ llm: stub(`${good}
+
+## Sources
+- x`) }))).rejects.toThrow(
+      /unexpected level-2 headings/,
+    );
+    expect(counts()).toEqual({ versions: 0, sources: 0 });
+  });
+
+  it('draft with headings out of order is rejected', async () => {
+    const p = choking();
+    const swapped = [SOP_HEADINGS[1], SOP_HEADINGS[0], SOP_HEADINGS[2], SOP_HEADINGS[3]].map((h) => `${h}
+t`).join('\n');
+    await expect(generateDraft(db, p.id, [RC], deps({ llm: stub(swapped) }))).rejects.toBeInstanceOf(LlmValidationError);
+    expect(counts()).toEqual({ versions: 0, sources: 0 });
+  });
+
+  it('redirect to a non-allowlisted host is rejected', async () => {
+    const p = choking();
+    const redirecting = (async (input: string | URL | Request) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url === RC) return new Response(null, { status: 302, headers: { location: 'https://evil.example/x' } });
+      if (url.startsWith('https://evil.example/')) {
+        return new Response('<title>Evil</title><p>x</p>', { status: 200, headers: { 'content-type': 'text/html' } });
+      }
+      return fakeSiteFetch(WEB_DIR)(url);
+    }) as typeof fetch;
+    await expect(
+      generateDraft(db, p.id, [RC], deps({ allowlist: ['redcross.example'], fetch: redirecting })),
+    ).rejects.toMatchObject({ code: 'source_unreachable' });
+    expect(counts()).toEqual({ versions: 0, sources: 0 });
+  });
+
+  it('allowlist rejects lookalike hosts', async () => {
+    const p = choking();
+    for (const url of ['https://evil-redcross.example/x', 'https://redcross.example.evil/x']) {
+      await expect(generateDraft(db, p.id, [url], deps({ allowlist: ['redcross.example'] }))).rejects.toMatchObject({
+        code: 'source_not_allowed',
+      });
+    }
+  });
+});
+
 describe('allowlist', () => {
   it('parseAllowlist and isAllowedSource', () => {
     expect(parseAllowlist(' Redcross.example, nhs.example\n  ,')).toEqual(['redcross.example', 'nhs.example']);
@@ -162,6 +212,15 @@ describe('protocol admin routes', () => {
     expect(html).toContain(NHS);
     const list = await (await app.request('/admin/protocols', { headers: { cookie } })).text();
     expect(list).toContain('choking-adult');
+  });
+
+  it('draft route maps ProtocolError to 400', async () => {
+    const app = await makeApp(fixtureProvider(LLM_DIR));
+    const cookie = await adminLogin(app, 'correct horse');
+    const p = choking();
+    const res = await app.request(`/admin/protocols/${p.id}/draft`, form(cookie, { source_urls: 'ftp://x.example/a' }));
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('Source is not a valid http(s) URL');
   });
 
   it('draft route without llm is 503', async () => {

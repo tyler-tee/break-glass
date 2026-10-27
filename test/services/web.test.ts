@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { fetchWebsiteText, htmlToText, isSafeTarget, pickPages } from '../../src/services/llm/web.js';
+import { fetchPage, fetchWebsiteText, htmlToText, isSafeTarget, pickPages } from '../../src/services/llm/web.js';
 import { fakeSiteFetch } from '../helpers/fakeSiteFetch.js';
 
 const ROOT = path.resolve(import.meta.dirname, '../fixtures/web');
@@ -169,6 +169,19 @@ describe('fetchWebsiteText', () => {
     });
     expect(calls.slice(0, 2)).toEqual(['https://www.near-dental.example/', 'https://near-dental.example/']);
     expect(pages[0]?.text).toContain('Near Dental Group');
+  });
+});
+
+describe('fetchPage', () => {
+  it('fetchPage honors allowHost on the initial URL', async () => {
+    const fetch = fakeSiteFetch(ROOT);
+    const warn = vi.fn();
+    const log = { info() {}, warn, error() {} };
+    const blocked = await fetchPage('https://near-dental.example/', { fetch, lookup: publicLookup, log, allowHost: () => false });
+    expect(blocked).toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('blocked by allowlist'));
+    const ok = await fetchPage('https://near-dental.example/', { fetch, lookup: publicLookup, allowHost: () => true });
+    expect(ok?.url).toBe('https://near-dental.example/');
   });
 });
 
