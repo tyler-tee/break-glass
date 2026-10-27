@@ -31,7 +31,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): Env {
   return result.data;
 }
 
-function parseEnvLines(text: string): Record<string, string> {
+export function parseDotEnv(text: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
@@ -52,12 +52,15 @@ function parseEnvLines(text: string): Record<string, string> {
 }
 
 /** Load .env, then .env.local; .env.local overrides .env but never real environment variables. */
-export function loadDotEnvFiles(): void {
-  const fromShell = new Set(Object.keys(process.env));
-  for (const file of ['.env', '.env.local']) {
+export function loadDotEnvFiles(
+  paths: string[] = ['.env', '.env.local'],
+  target: NodeJS.ProcessEnv = process.env,
+): void {
+  const fromShell = new Set(Object.keys(target));
+  for (const file of paths) {
     try {
-      for (const [k, v] of Object.entries(parseEnvLines(readFileSync(file, 'utf8')))) {
-        if (!fromShell.has(k)) process.env[k] = v;
+      for (const [k, v] of Object.entries(parseDotEnv(readFileSync(file, 'utf8')))) {
+        if (!fromShell.has(k)) target[k] = v;
       }
     } catch {
       // file is optional

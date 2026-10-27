@@ -270,6 +270,25 @@ describe('discovery routes', () => {
     return { app, cookie: await adminLogin(app, 'correct horse') };
   };
 
+  it('discover route returns 429 when the monthly cap is reached', async () => {
+    const ledger = dbLedger(db);
+    ledger.add(ledger.month(now), 800, now);
+    const { app, cookie } = await makeApp(true);
+    const res = await post(app, cookie, `/admin/categories/${categoryId}/discover`);
+    expect(res.status).toBe(429);
+    expect(await res.text()).toContain('Places call cap reached (month)');
+    expect(rows()).toHaveLength(0);
+  });
+
+  it('geocode route returns 429 when the monthly cap is reached', async () => {
+    const ledger = dbLedger(db);
+    ledger.add(ledger.month(now), 800, now);
+    const { app, cookie } = await makeApp(true);
+    const res = await post(app, cookie, '/admin/settings/geocode', new URLSearchParams({ address: 'x' }).toString());
+    expect(res.status).toBe(429);
+    expect(await res.text()).toContain('Places call cap reached (month)');
+  });
+
   it('discover route maps PlacesError to 502', async () => {
     const { app, cookie } = await makeFailingApp();
     const res = await post(app, cookie, `/admin/categories/${categoryId}/discover`);

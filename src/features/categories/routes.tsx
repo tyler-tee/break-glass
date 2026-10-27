@@ -2,8 +2,8 @@ import { Hono } from 'hono';
 import type { AppDeps } from '../../app.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
-import { placesErrorPage } from '../../web/placesErrorPage.js';
-import { newPlacesBudget } from '../../services/places/budget.js';
+import { budgetExhaustedPage, placesErrorPage } from '../../web/placesErrorPage.js';
+import { BudgetExhausted, newPlacesBudget } from '../../services/places/budget.js';
 import { PlacesError } from '../../services/places/client.js';
 import { NoHomeLocation, runDiscovery } from '../locations/discovery.js';
 import { CategoryError, createCategory, deleteCategory, getCategory, listCategories, updateCategory } from './repo.js';
@@ -163,6 +163,8 @@ export function categoriesRoutes(deps: AppDeps): Hono {
         log: console,
         ...(deps.extract ? { extract: deps.extract } : {}),
       });
+      // runDiscovery reports budget stops instead of throwing; with no calls made there is nothing to show.
+      if (report.stoppedEarly && report.callsUsed === 0) return budgetExhaustedPage(c, report.stopReason ?? 'run');
       const q = new URLSearchParams({
         category: category.slug,
         inserted: String(report.inserted),
@@ -175,6 +177,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
       if (e instanceof NoHomeLocation) {
         return listPage(c, { error: 'Set the home location in Settings first', status: 400 });
       }
+      if (e instanceof BudgetExhausted) return budgetExhaustedPage(c, e.reason);
       if (e instanceof PlacesError) return placesErrorPage(c, e);
       throw e;
     }

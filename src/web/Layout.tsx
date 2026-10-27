@@ -55,7 +55,7 @@ export const Layout: FC<PropsWithChildren<{ title: string }>> = ({ title, childr
   </html>
 );
 
-export function page(c: Context, title: string, body: Child, status: 200 | 400 | 401 | 404 | 409 | 502 | 503 = 200) {
+export function page(c: Context, title: string, body: Child, status: 200 | 400 | 401 | 404 | 409 | 429 | 502 | 503 = 200) {
   c.status(status);
   return c.html(html`<!DOCTYPE html>${(<Layout title={title}>{body}</Layout>)}`);
 }

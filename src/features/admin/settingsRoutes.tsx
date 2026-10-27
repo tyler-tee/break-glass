@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import type { AppDeps } from '../../app.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
-import { newPlacesBudget } from '../../services/places/budget.js';
+import { BudgetExhausted, newPlacesBudget } from '../../services/places/budget.js';
 import { PlacesError, geocode } from '../../services/places/client.js';
 import { page } from '../../web/Layout.js';
-import { placesErrorPage } from '../../web/placesErrorPage.js';
+import { budgetExhaustedPage, placesErrorPage } from '../../web/placesErrorPage.js';
 import { SettingsValidationError, getSettings, updateSettings, type Settings } from './settingsRepo.js';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -113,6 +113,7 @@ export function settingsRoutes(deps: AppDeps): Hono {
     try {
       hit = await geocode(address, { ...deps.places, budget: newPlacesBudget(deps.db, deps.env, deps.now) });
     } catch (e) {
+      if (e instanceof BudgetExhausted) return budgetExhaustedPage(c, e.reason);
       if (e instanceof PlacesError) return placesErrorPage(c, e);
       throw e;
     }
