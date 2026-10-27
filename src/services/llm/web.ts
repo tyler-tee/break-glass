@@ -1,3 +1,5 @@
+import dns from 'node:dns';
+import net from 'node:net';
 import type { Logger } from '../../domain/types.js';
 
 export type FetchedPage = { url: string; text: string };
@@ -70,36 +72,137 @@ export function pickPages(homepageHtml: string, baseUrl: string, max = 4): strin
   return picked;
 }
 
-async function fetchHtml(
-  url: string,
-  fetchFn: typeof fetch,
-  timeoutMs: number,
-): Promise<string | null> {
-  const res = await fetchFn(url, {
-    signal: AbortSignal.timeout(timeoutMs),
-    headers: { 'User-Agent': 'break-glass/1.0 (household emergency toolkit)' },
-  });
-  if (!res.ok) return null;
-  const type = res.headers.get('content-type');
-  if (type !== null && !/^\s*(text\/html|application\/xhtml\+xml)\b/i.test(type)) return null;
-  return (await res.text()).slice(0, MAX_HTML_CHARS);
+export type LookupFn = (
+  hostname: string,
+  opts: { all: true },
+) => Promise<{ address: string; family: number }[]>;
+
+const defaultLookup = dns.promises.lookup as unknown as LookupFn;
+
+const MAX_BODY_CHARS = 2_000_000;
+const MAX_REDIRECTS = 3;
+
+function isBlockedV4(addr: string): boolean {
+  const parts = addr.split('.').map(Number);
+  const [a = 0, b = 0] = parts;
+  if (a === 0 || a === 127 || a === 10) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return a >= 224 && a <= 239;
+}
+
+function isBlockedIp(raw: string): boolean {
+  const addr = raw.toLowerCase().replace(/^\[|\]$/g, '').split('%')[0] ?? '';
+  const kind = net.isIP(addr);
+  if (kind === 4) return isBlockedV4(addr);
+  if (kind !== 6) return true;
+  const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(addr);
+  if (dotted) return isBlockedV4(dotted[1] as string);
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(addr);
+  if (hex) {
+    const hi = parseInt(hex[1] as string, 16);
+    const lo = parseInt(hex[2] as string, 16);
+    return isBlockedV4(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+  }
+  if (addr.startsWith('::')) return true; // unspecified, loopback, IPv4-compatible
+  const first = parseInt(addr.split(':')[0] || '0', 16);
+  if (first >= 0xfe80 && first <= 0xfebf) return true; // link-local fe80::/10
+  if (first >= 0xfc00 && first <= 0xfdff) return true; // unique local fc00::/7
+  return first >= 0xff00; // multicast ff00::/8
+}
+
+export async function isSafeTarget(url: URL, lookup: LookupFn = defaultLookup): Promise<boolean> {
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return false;
+  if (net.isIP(host) !== 0) return !isBlockedIp(host);
+  try {
+    const addrs = await lookup(host, { all: true });
+    return addrs.length > 0 && addrs.every((a) => !isBlockedIp(a.address));
+  } catch {
+    return false;
+  }
+}
+
+async function readCapped(res: Response, maxChars: number): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return '';
+  const decoder = new TextDecoder();
+  let out = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    out += decoder.decode(value, { stream: true });
+    if (out.length >= maxChars) {
+      await reader.cancel();
+      break;
+    }
+  }
+  return out.slice(0, maxChars);
+}
+
+type FetchCtx = { fetch: typeof fetch; timeoutMs: number; lookup: LookupFn; log?: Logger };
+
+async function fetchHtml(startUrl: string, ctx: FetchCtx): Promise<string | null> {
+  let current = new URL(startUrl);
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (!(await isSafeTarget(current, ctx.lookup))) {
+      ctx.log?.warn(`blocked unsafe target: ${current.href}`);
+      return null;
+    }
+    const res = await ctx.fetch(current.href, {
+      signal: AbortSignal.timeout(ctx.timeoutMs),
+      redirect: 'manual',
+      headers: { 'User-Agent': 'break-glass/1.0 (household emergency toolkit)' },
+    });
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location');
+      if (!location) return null;
+      try {
+        current = new URL(location, current);
+      } catch {
+        return null;
+      }
+      continue;
+    }
+    if (!res.ok) return null;
+    const type = res.headers.get('content-type');
+    if (!type || !/^\s*(text\/html|application\/xhtml\+xml)\b/i.test(type)) return null;
+    const length = Number(res.headers.get('content-length'));
+    if (Number.isFinite(length) && length > MAX_BODY_CHARS) return null;
+    return (await readCapped(res, MAX_BODY_CHARS)).slice(0, MAX_HTML_CHARS);
+  }
+  ctx.log?.warn(`too many redirects for ${startUrl}`);
+  return null;
 }
 
 export async function fetchWebsiteText(
   url: string,
-  deps: { fetch: typeof fetch; timeoutMs?: number; maxChars?: number; log?: Logger },
+  deps: {
+    fetch: typeof fetch;
+    timeoutMs?: number;
+    maxChars?: number;
+    log?: Logger;
+    lookup?: LookupFn;
+  },
 ): Promise<FetchedPage[]> {
-  const timeoutMs = deps.timeoutMs ?? 10_000;
+  const ctx: FetchCtx = {
+    fetch: deps.fetch,
+    timeoutMs: deps.timeoutMs ?? 10_000,
+    lookup: deps.lookup ?? defaultLookup,
+    ...(deps.log ? { log: deps.log } : {}),
+  };
   const maxChars = deps.maxChars ?? 20_000;
   let homepageHtml: string | null;
   try {
-    homepageHtml = await fetchHtml(url, deps.fetch, timeoutMs);
+    homepageHtml = await fetchHtml(url, ctx);
   } catch (err) {
     deps.log?.warn(`website fetch failed for ${url}: ${String(err)}`);
     return [];
   }
   if (homepageHtml === null) {
-    deps.log?.warn(`website fetch for ${url}: non-OK or non-HTML response`);
+    deps.log?.warn(`website fetch for ${url}: non-OK, non-HTML or blocked response`);
     return [];
   }
 
@@ -113,9 +216,9 @@ export async function fetchWebsiteText(
   }
   for (const target of targets) {
     try {
-      const html = await fetchHtml(target, deps.fetch, timeoutMs);
+      const html = await fetchHtml(target, ctx);
       if (html === null) {
-        deps.log?.warn(`skipping ${target}: non-OK or non-HTML response`);
+        deps.log?.warn(`skipping ${target}: non-OK, non-HTML or blocked response`);
         continue;
       }
       pages.push({ url: target, text: htmlToText(html).slice(0, maxChars) });
