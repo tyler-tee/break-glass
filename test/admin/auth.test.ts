@@ -101,6 +101,30 @@ describe('admin auth', () => {
   });
 });
 
+describe('admin origin check', () => {
+  const post = (cookie: string, headers: Record<string, string>) =>
+    app.request('/admin/logout', { method: 'POST', headers: { cookie, host: 'break-glass.lan:3000', ...headers } });
+
+  it('cross-origin POST to admin is 403', async () => {
+    const cookie = await login();
+    expect((await post(cookie, { origin: 'http://other.lan:8080' })).status).toBe(403);
+    expect((await post(cookie, { origin: 'http://break-glass.lan:8080' })).status).toBe(403);
+    expect((await post(cookie, { referer: 'http://other.lan:3000/page' })).status).toBe(403);
+    expect((await post(cookie, { origin: 'null' })).status).toBe(403);
+  });
+
+  it('same-origin POST is allowed', async () => {
+    const cookie = await login();
+    expect((await post(cookie, { origin: 'http://break-glass.lan:3000' })).status).toBe(302);
+    expect((await post(cookie, { referer: 'http://break-glass.lan:3000/admin' })).status).toBe(302);
+  });
+
+  it('POST without Origin or Referer is allowed', async () => {
+    const cookie = await login();
+    expect((await post(cookie, {})).status).toBe(302);
+  });
+});
+
 describe('verifyPassword formats', () => {
   it('verifyPassword accepts colon-separated hashes', async () => {
     const h = await hashPassword('pw');

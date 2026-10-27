@@ -64,3 +64,24 @@ export function requireAdmin(secret: string, now: () => Date): MiddlewareHandler
     await next();
   };
 }
+
+// Rejects browser POSTs whose Origin (or Referer) host differs from Host. Closes the same-site,
+// different-port CSRF gap that SameSite=Lax leaves open. Clients that send neither header are allowed.
+export const requireSameOrigin: MiddlewareHandler = async (c, next) => {
+  if (c.req.method === 'POST') {
+    const claimed = c.req.header('origin') ?? c.req.header('referer');
+    if (claimed !== undefined) {
+      let host: string | null;
+      try {
+        host = new URL(claimed).host;
+      } catch {
+        host = null;
+      }
+      const expected = c.req.header('host') ?? new URL(c.req.url).host;
+      if (host === null || host.toLowerCase() !== expected.toLowerCase()) {
+        return c.text('Forbidden: cross-origin request', 403);
+      }
+    }
+  }
+  await next();
+};

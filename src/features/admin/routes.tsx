@@ -9,7 +9,7 @@ import { protocolsAdminRoutes } from '../protocols/adminRoutes.js';
 import { settingsRoutes } from './settingsRoutes.js';
 import type { JobName, RunResult } from '../../jobs/scheduler.js';
 import { newPlacesBudget } from '../../services/places/budget.js';
-import { SESSION_COOKIE, createSession, requireAdmin, verifyPassword } from './auth.js';
+import { SESSION_COOKIE, createSession, requireAdmin, requireSameOrigin, verifyPassword } from './auth.js';
 
 const JOB_NAMES: readonly string[] = ['refreshLocations', 'recheckProtocols'];
 
@@ -53,6 +53,7 @@ export function adminRoutes(deps: AppDeps): Hono {
   });
 
   app.use('*', requireAdmin(env.SESSION_SECRET, now));
+  app.use('*', requireSameOrigin);
 
   app.get('/', (c) => {
     const job = c.req.query('job');
