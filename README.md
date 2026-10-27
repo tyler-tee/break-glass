@@ -9,7 +9,7 @@ A self-hosted web app for the home LAN that answers one question fast: "Where do
 ## Prerequisites
 
 - Docker with Compose, for the homelab deployment.
-- Node 24 and npm, only for local development and tests.
+- Node 24 and npm on any machine where you generate the password hash and session secret (it can be your laptop, not the server), and for local development and tests. No-Node alternatives are given under Configuration.
 - Optional: a Google Places API (New) key (discovery, refresh, geocoding) and an Anthropic API key (extraction, protocol drafting). Without them the app still serves manually entered locations.
 
 ## Configuration
@@ -20,8 +20,8 @@ Copy the example file and edit it:
 cp .env.example .env
 ```
 
-1. Admin password hash: `npm run hash-password -- '<password>'` (run `npm install` once first). Paste the output into `ADMIN_PASSWORD_HASH`, keeping the single quotes that `.env.example` shows, because the hash contains `$`.
-2. Session secret: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` and paste it into `SESSION_SECRET` (at least 32 characters).
+1. Admin password hash: `npm run hash-password -- '<password>'` (run `npm install` once first). Paste the output into `ADMIN_PASSWORD_HASH`. Without Node on the host you can build the image first and hash inside it (untested here, since Docker was unavailable when this was written): `docker compose run --rm --no-deps app node -e "import('./dist/features/admin/auth.js').then(m=>m.hashPassword(process.argv[1])).then(console.log)" '<password>'`. This needs a `.env` that already passes validation, so put a placeholder hash and a real secret in first, then replace the hash.
+2. Session secret: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` and paste it into `SESSION_SECRET` (at least 32 characters). Without Node, `openssl rand -hex 32` does the same.
 3. Optionally add `GOOGLE_PLACES_API_KEY`, and `LLM_PROVIDER=anthropic` with `LLM_API_KEY`.
 
 For local development you can put overrides in `.env.local`. It is loaded after `.env`, wins over it, and never overrides variables set in the real environment. Both files are git-ignored. Empty values (`PORT=`) count as unset and fall back to the default.
@@ -104,8 +104,23 @@ In the Google Cloud console, also restrict the API key to "Places API (New)" onl
 - Schedules run in the home timezone set in Settings, not the container's. Both cron expressions are editable there.
 - The admin UI has "Run now" buttons for the location refresh and the protocol re-check.
 - Changing the HTML text extractor changes how source text is hashed, so every published protocol is flagged `needs_rereview` once on the next re-check. Re-publishing a protocol clears the flag.
-- Backup: copy the database out of the volume, for example `docker cp <container>:/data/app.db ./app.db.bak` (find the name with `docker compose ps`). For a fully consistent copy, stop the container first or also copy `app.db-wal` and `app.db-shm`.
-- Restore: `docker compose stop`, replace `/data/app.db` in the volume (for example with `docker cp` into the stopped container, keeping ownership as the `node` user), delete any stale `app.db-wal` and `app.db-shm`, then `docker compose start`.
+- Backup: stop the app so the WAL is checkpointed, then copy the database out of the volume with a one-shot container. The volume name is prefixed with the compose project name (usually the directory name), so look it up first:
+
+  ```
+  docker volume ls            # find <project>_bg-data
+  docker compose stop app
+  docker run --rm -v <project>_bg-data:/data -v "$PWD":/backup debian:bookworm-slim cp /data/app.db /backup/app.db.bak
+  docker compose start app
+  ```
+
+- Restore: stop the app, then replace the file from a one-shot container. The `node` user in the image is uid 1000, so the restored file must be owned by 1000:1000.
+
+  ```
+  docker compose stop app
+  docker run --rm -v <project>_bg-data:/data -v "$PWD":/backup debian:bookworm-slim sh -c 'rm -f /data/app.db-wal /data/app.db-shm && cp /backup/app.db.bak /data/app.db && chown 1000:1000 /data/app.db'
+  docker compose start app
+  ```
+
 - Update: `git pull && docker compose up -d --build`. Migrations run at boot; the volume is preserved.
 
 ## Troubleshooting
@@ -114,4 +129,3 @@ In the Google Cloud console, also restrict the API key to "Places API (New)" onl
 - 502 pages in the admin UI: an upstream (Places, Anthropic, or a source website) returned an error; the page shows the upstream error text.
 - 429: the Places call cap for the run or the month was reached. Raise `PLACES_CALL_CAP` or `PLACES_MONTHLY_CAP`, or wait for the next month.
 - Container restarts immediately: check `docker compose logs app`; a missing or too-short `SESSION_SECRET` or a missing `ADMIN_PASSWORD_HASH` is reported as "Invalid environment".
-- Login always fails with Docker: make sure the hash in `.env` is wrapped in single quotes.

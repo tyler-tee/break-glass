@@ -17,12 +17,13 @@ function derive(pw: string, salt: BinaryLike): Promise<Buffer> {
 export async function hashPassword(pw: string): Promise<string> {
   const salt = randomBytes(16);
   const key = await derive(pw, salt);
-  return `scrypt$${salt.toString('hex')}$${key.toString('hex')}`;
+  return `scrypt:${salt.toString('hex')}:${key.toString('hex')}`;
 }
 
 export async function verifyPassword(pw: string, stored: string): Promise<boolean> {
   try {
-    const parts = stored.split('$');
+    // ':' is the current separator; '$' is legacy (earlier hashes keep working).
+    const parts = stored.split(/[:$]/);
     if (parts.length !== 3 || parts[0] !== 'scrypt') return false;
     const [, saltHex, keyHex] = parts as [string, string, string];
     if (!/^[0-9a-f]+$/i.test(saltHex) || !/^[0-9a-f]+$/i.test(keyHex)) return false;

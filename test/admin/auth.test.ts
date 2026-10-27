@@ -100,3 +100,19 @@ describe('admin auth', () => {
     expect(res.headers.get('set-cookie')).toContain('bg_session=;');
   });
 });
+
+describe('verifyPassword formats', () => {
+  it('verifyPassword accepts colon-separated hashes', async () => {
+    const h = await hashPassword('pw');
+    expect(h).toMatch(/^scrypt:[0-9a-f]+:[0-9a-f]+$/);
+    expect(await verifyPassword('pw', h)).toBe(true);
+    expect(await verifyPassword('nope', h)).toBe(false);
+  });
+
+  it('verifyPassword still accepts legacy dollar-separated hashes', async () => {
+    const legacy = (await hashPassword('pw')).replace(/:/g, '$');
+    expect(legacy.startsWith('scrypt$')).toBe(true);
+    expect(await verifyPassword('pw', legacy)).toBe(true);
+    expect(await verifyPassword('nope', legacy)).toBe(false);
+  });
+});
