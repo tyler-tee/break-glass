@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      - "TZ=${TZ:-America/Denver}"
+      # Override values copied from .env.example: the database must live on the volume.
+      - "DATABASE_PATH=/data/app.db"
+      - "PORT=3000"
+    volumes:
+      - "bg-data:/data"
+    restart: unless-stopped
+
+volumes:
+  bg-data: {}

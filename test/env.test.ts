@@ -37,3 +37,29 @@ it('missing file is ignored', () => {
   loadDotEnvFiles([path.join(os.tmpdir(), 'definitely-missing-dotenv-file')], target);
   expect(target).toEqual({ A: '1' });
 });
+
+it('empty numeric values fall back to defaults', () => {
+  const e = loadEnv({
+    SESSION_SECRET: 's'.repeat(32),
+    ADMIN_PASSWORD_HASH: 'x',
+    PORT: '',
+    PLACES_CALL_CAP: '',
+    PLACES_MONTHLY_CAP: '',
+    REFRESH_FAILURE_THRESHOLD: '',
+    RATING_WARN_DELTA: '',
+  });
+  expect(e.PORT).toBe(3000);
+  expect(e.PLACES_CALL_CAP).toBe(200);
+  expect(e.PLACES_MONTHLY_CAP).toBe(800);
+  expect(e.REFRESH_FAILURE_THRESHOLD).toBe(3);
+  expect(e.RATING_WARN_DELTA).toBe(0.5);
+});
+
+it('zero threshold is rejected', () => {
+  const base = { SESSION_SECRET: 's'.repeat(32), ADMIN_PASSWORD_HASH: 'x' };
+  expect(() => loadEnv({ ...base, REFRESH_FAILURE_THRESHOLD: '0' })).toThrow(/REFRESH_FAILURE_THRESHOLD/);
+  expect(() => loadEnv({ ...base, PLACES_CALL_CAP: '0' })).toThrow(/PLACES_CALL_CAP/);
+  expect(() => loadEnv({ ...base, PORT: '1.5' })).toThrow(/PORT/);
+  expect(() => loadEnv({ ...base, RATING_WARN_DELTA: '-1' })).toThrow(/RATING_WARN_DELTA/);
+  expect(loadEnv({ ...base, RATING_WARN_DELTA: '0' }).RATING_WARN_DELTA).toBe(0);
+});

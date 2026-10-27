@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import { openDb } from './db/client.js';
-import { runMigrations } from './db/migrate.js';
+import { ensureSettingsRow, runMigrations } from './db/migrate.js';
 import { loadDotEnvFiles, loadEnv } from './env.js';
 import { recheckProtocols } from './jobs/recheckProtocols.js';
 import { refreshLocations } from './jobs/refreshLocations.js';
@@ -15,6 +15,7 @@ loadDotEnvFiles();
 const env = loadEnv(process.env);
 const db = openDb(env.DATABASE_PATH);
 runMigrations(db);
+ensureSettingsRow(db);
 const places = env.GOOGLE_PLACES_API_KEY
   ? { fetch: globalThis.fetch, apiKey: env.GOOGLE_PLACES_API_KEY }
   : undefined;
@@ -36,8 +37,7 @@ const scheduler = startScheduler({
             log: console,
             ...(extract ? { extract } : {}),
           })
-        : (console.info('refreshLocations skipped: GOOGLE_PLACES_API_KEY not set'),
-          Promise.resolve()),
+        : Promise.resolve({ skipped: 'GOOGLE_PLACES_API_KEY not set' }),
     recheckProtocols: () =>
       recheckProtocols(db, { fetch: globalThis.fetch, now: () => new Date(), log: console }),
   },

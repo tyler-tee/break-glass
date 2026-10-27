@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { Db } from './db/client.js';
 import type { Extractor } from './services/llm/extract.js';
@@ -19,6 +20,14 @@ export type AppDeps = { db: Db; env: Env; now?: () => Date; scheduler?: Schedule
 
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
+  app.get('/health', (c) => {
+    try {
+      deps.db.run(sql`select 1`);
+      return c.json({ ok: true });
+    } catch {
+      return c.json({ ok: false }, 503);
+    }
+  });
   app.route('/', familyRoutes(deps));
   app.route('/api', apiRoutes(deps));
   app.route('/admin', adminRoutes(deps));
