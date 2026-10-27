@@ -21,6 +21,7 @@
   --ink: #0f172a;
   --muted: #475569;
   --border: #cbd5e1;
+  --control-border: #64748b; /* >=3:1 on surface and surface-2 (4.55/4.76) */
   --primary: #0f5f6e;
   --primary-ink: #ffffff;
   --focus: var(--primary);
@@ -59,6 +60,7 @@
     --ink: #e2e8f0;
     --muted: #94a3b8;
     --border: #334155;
+    --control-border: #64748b; /* 4.24 on surface, 3.75 on surface-2 */
     --primary: #5eead4;
     --primary-ink: #042f2e;
     --danger: #ff6b6b;
@@ -161,7 +163,7 @@ input, select, textarea {
   font: inherit;
   color: var(--ink);
   background: var(--surface-2);
-  border: 2px solid var(--border);
+  border: 2px solid var(--control-border);
   border-radius: var(--radius);
 }
 input:hover, select:hover, textarea:hover { border-color: var(--muted); }
@@ -198,6 +200,7 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; accent
   color: var(--danger-ink);
   font-weight: 700;
   text-decoration: none;
+  min-height: 56px;
   border-radius: var(--radius);
 }
 .row {
@@ -228,6 +231,7 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; accent
   color: var(--go-ink);
   font-weight: 700;
   text-decoration: none;
+  min-height: 56px;
   border-radius: var(--radius);
 }
 .protocol-row small { display: block; color: var(--muted); }

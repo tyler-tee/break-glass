@@ -34,9 +34,11 @@ export function registerAssets(app: Hono): void {
     const name = c.req.param('file');
     const a = Object.hasOwn(ALLOWED, name) ? loaded.get(name) : undefined;
     if (!a) return c.notFound();
+    // Only a request pinned to the current content hash may be cached forever.
+    const pinned = c.req.query('v') === a.hash;
     return c.body(new Uint8Array(a.body), 200, {
       'Content-Type': a.type,
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': pinned ? 'public, max-age=31536000, immutable' : 'public, max-age=3600',
     });
   });
 }

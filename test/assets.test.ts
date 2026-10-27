@@ -9,13 +9,23 @@ const app = () => createApp({ db: createTestDb(), env });
 
 describe('static assets', () => {
   it('serves styles.css with long-lived immutable cache header', async () => {
-    const res = await app().request('/assets/styles.css');
+    const res = await app().request(assetUrl('styles.css'));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/css');
     const cc = res.headers.get('cache-control') ?? '';
     expect(cc).toContain('max-age=31536000');
     expect(cc).toContain('immutable');
     expect(await res.text()).toContain('--primary');
+  });
+
+  it('unhashed or stale-hash requests get a short cache, not immutable', async () => {
+    for (const url of ['/assets/styles.css', '/assets/styles.css?v=deadbeef']) {
+      const res = await app().request(url);
+      expect(res.status).toBe(200);
+      const cc = res.headers.get('cache-control') ?? '';
+      expect(cc).toContain('max-age=3600');
+      expect(cc).not.toContain('immutable');
+    }
   });
 
   it('serves the woff2 font', async () => {
