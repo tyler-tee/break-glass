@@ -1,3 +1,6 @@
+import { marked } from 'marked';
+import sanitizeHtml from 'sanitize-html';
+
 export function telHref(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   return `tel:${phone.trim().startsWith('+') ? '+' : ''}${digits}`;
@@ -24,4 +27,12 @@ export function formatHHMM(hhmm: string): string {
 
 export function formatMiles(d: number | null): string | null {
   return d === null ? null : `${d.toFixed(1)} mi`;
+}
+
+export function renderMarkdown(md: string): string {
+  return sanitizeHtml(marked.parse(md, { async: false }) as string, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['h1', 'h2', 'h3']),
+    allowedAttributes: { a: ['href'] },
+    allowedSchemes: ['http', 'https', 'tel'],
+  });
 }

@@ -68,6 +68,14 @@ export function updateVersion(
   return db.update(protocolVersions).set(values).where(eq(protocolVersions.id, id)).returning().get() ?? null;
 }
 
+export function updateProtocolReview(
+  db: DbOrTx,
+  id: number,
+  values: { needsRereview: boolean; rereviewReason: string | null },
+): void {
+  db.update(protocols).set(values).where(eq(protocols.id, id)).run();
+}
+
 export function insertSources(db: DbOrTx, rows: (typeof protocolSources.$inferInsert)[]): void {
   if (rows.length > 0) db.insert(protocolSources).values(rows).run();
 }

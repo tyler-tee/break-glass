@@ -42,6 +42,19 @@ function level2Headings(body: string): string[] {
     .filter((l) => /^##\s/.test(l));
 }
 
+export function assertSopHeadings(body: string): void {
+  const found = level2Headings(body);
+  if (found.length === SOP_HEADINGS.length && SOP_HEADINGS.every((h, i) => found[i] === h)) return;
+  const missing = SOP_HEADINGS.some((h) => !found.includes(h));
+  throw new LlmValidationError(
+    body,
+    null,
+    missing
+      ? 'draft missing required SOP headings'
+      : `draft has unexpected level-2 headings: ${found.join(' | ')}`,
+  );
+}
+
 export async function draftProtocol(
   llm: LlmProvider,
   model: string,
@@ -56,14 +69,6 @@ export async function draftProtocol(
     maxTokens: 4096,
     effort: 'high',
   });
-  const found = level2Headings(bodyMd);
-  if (found.length === SOP_HEADINGS.length && SOP_HEADINGS.every((h, i) => found[i] === h)) return bodyMd;
-  const missing = SOP_HEADINGS.some((h) => !found.includes(h));
-  throw new LlmValidationError(
-    bodyMd,
-    null,
-    missing
-      ? 'draft missing required SOP headings'
-      : `draft has unexpected level-2 headings: ${found.join(' | ')}`,
-  );
+  assertSopHeadings(bodyMd);
+  return bodyMd;
 }

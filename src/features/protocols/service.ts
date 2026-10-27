@@ -1,10 +1,20 @@
 import { createHash } from 'node:crypto';
-import type { Db } from '../../db/client.js';
-import type { Logger } from '../../domain/types.js';
-import { draftProtocol } from '../../services/llm/draft.js';
-import type { LlmProvider } from '../../services/llm/provider.js';
+import type { Db, DbOrTx } from '../../db/client.js';
+import type { Logger, ProtocolStatus } from '../../domain/types.js';
+import { assertSopHeadings, draftProtocol } from '../../services/llm/draft.js';
+import { LlmValidationError, type LlmProvider } from '../../services/llm/provider.js';
 import { fetchPage, type LookupFn } from '../../services/llm/web.js';
-import { getProtocol, insertSources, insertVersion, nextVersionNumber, type ProtocolVersion } from './repo.js';
+import {
+  getProtocol,
+  getVersion,
+  insertSources,
+  insertVersion,
+  listVersions,
+  nextVersionNumber,
+  updateProtocolReview,
+  updateVersion,
+  type ProtocolVersion,
+} from './repo.js';
 
 export type ProtocolErrorCode =
   | 'invalid'
@@ -105,4 +115,68 @@ export async function generateDraft(
     );
     return version;
   });
+}
+
+// Single source of truth for allowed version status moves.
+const VERSION_TRANSITIONS: Record<ProtocolStatus, ProtocolStatus[]> = {
+  draft: ['in_review', 'published', 'rejected'],
+  in_review: ['published', 'rejected'],
+  published: ['superseded'],
+  superseded: [],
+  rejected: [],
+};
+
+function loadVersion(db: DbOrTx, versionId: number): ProtocolVersion {
+  const v = getVersion(db, versionId);
+  if (!v) throw new ProtocolError('not_found', 'Version not found');
+  return v;
+}
+
+function requireTransition(v: ProtocolVersion, to: ProtocolStatus): void {
+  if (!VERSION_TRANSITIONS[v.status].includes(to)) {
+    throw new ProtocolError('invalid_transition', `Cannot move a ${v.status} version to ${to}`);
+  }
+}
+
+export function updateDraftBody(db: Db, versionId: number, bodyMd: string, _now: Date): ProtocolVersion {
+  const v = loadVersion(db, versionId);
+  if (v.status !== 'draft' && v.status !== 'in_review') {
+    throw new ProtocolError('invalid_transition', `Cannot edit a ${v.status} version`);
+  }
+  try {
+    assertSopHeadings(bodyMd);
+  } catch (e) {
+    if (e instanceof LlmValidationError) throw new ProtocolError('invalid', e.message.split(': ')[0] ?? e.message);
+    throw e;
+  }
+  return updateVersion(db, versionId, { bodyMd }) as ProtocolVersion;
+}
+
+export function submitForReview(db: Db, versionId: number, now: Date): ProtocolVersion {
+  const v = loadVersion(db, versionId);
+  if (v.status !== 'draft') throw new ProtocolError('invalid_transition', `Cannot submit a ${v.status} version`);
+  return updateVersion(db, versionId, { status: 'in_review', submittedAt: now }) as ProtocolVersion;
+}
+
+export function publishVersion(db: Db, versionId: number, now: Date, notes?: string): ProtocolVersion {
+  return db.transaction((tx) => {
+    const v = loadVersion(tx, versionId);
+    requireTransition(v, 'published');
+    for (const other of listVersions(tx, v.protocolId)) {
+      if (other.status === 'published') updateVersion(tx, other.id, { status: 'superseded' });
+    }
+    const out = updateVersion(tx, versionId, {
+      status: 'published',
+      reviewedAt: now,
+      reviewNotes: notes ?? null,
+    }) as ProtocolVersion;
+    updateProtocolReview(tx, v.protocolId, { needsRereview: false, rereviewReason: null });
+    return out;
+  });
+}
+
+export function rejectVersion(db: Db, versionId: number, now: Date, notes: string): ProtocolVersion {
+  const v = loadVersion(db, versionId);
+  requireTransition(v, 'rejected');
+  return updateVersion(db, versionId, { status: 'rejected', reviewedAt: now, reviewNotes: notes }) as ProtocolVersion;
 }

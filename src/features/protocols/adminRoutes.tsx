@@ -1,11 +1,29 @@
 import { Hono } from 'hono';
+import { raw } from 'hono/html';
 import type { AppDeps } from '../../app.js';
 import { slugify } from '../../domain/slug.js';
 import { LlmRefusalError, LlmValidationError } from '../../services/llm/provider.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
+import { renderMarkdown } from '../../web/format.js';
 import { page } from '../../web/Layout.js';
-import { createProtocol, getProtocol, getProtocolBySlug, listProtocols, listSources, listVersions } from './repo.js';
-import { ProtocolError, generateDraft, parseAllowlist } from './service.js';
+import {
+  createProtocol,
+  getProtocol,
+  getProtocolBySlug,
+  getVersion,
+  listProtocols,
+  listSources,
+  listVersions,
+} from './repo.js';
+import {
+  ProtocolError,
+  generateDraft,
+  parseAllowlist,
+  publishVersion,
+  rejectVersion,
+  submitForReview,
+  updateDraftBody,
+} from './service.js';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const fmt = (d: Date | null): string => (d ? d.toISOString().slice(0, 10) : '');
@@ -73,6 +91,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
               <th>Status</th>
               <th>Created</th>
               <th>Reviewed</th>
+              <th>Notes</th>
             </tr>
           </thead>
           <tbody>
@@ -81,9 +100,10 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
                 <td>
                   <a href={`/admin/protocols/${id}/versions/${v.id}`}>v{v.version}</a>
                 </td>
-                <td>{v.status}</td>
+                <td>{v.status === 'published' ? 'published (current)' : v.status}</td>
                 <td>{fmt(v.createdAt)}</td>
                 <td>{fmt(v.reviewedAt)}</td>
+                <td>{v.reviewNotes ?? ''}</td>
               </tr>
             ))}
           </tbody>
@@ -108,6 +128,141 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
       opts.status ?? 200,
     );
   };
+
+  const reviewPage = (
+    c: Parameters<typeof page>[0],
+    protocolId: number,
+    versionId: number,
+    opts: { error?: string; status?: 200 | 400 | 409; bodyMd?: string } = {},
+  ) => {
+    const protocol = getProtocol(db, protocolId);
+    const version = getVersion(db, versionId);
+    if (!protocol || !version || version.protocolId !== protocolId) return c.notFound();
+    const sources = listSources(db, versionId);
+    const base = `/admin/protocols/${protocolId}/versions/${versionId}`;
+    const open = version.status === 'draft' || version.status === 'in_review';
+    return page(
+      c,
+      `${protocol.title} v${version.version}`,
+      <>
+        <style
+          dangerouslySetInnerHTML={{
+            __html:
+              '.review{display:flex;flex-wrap:wrap;gap:16px}.review>section{flex:1 1 320px;min-width:0}.review textarea{width:100%}',
+          }}
+        />
+        <h1>
+          {protocol.title} v{version.version}
+        </h1>
+        <AdminNav />
+        <p class="badge badge-warn">{version.status}</p>
+        {version.reviewNotes && <p>Review notes: {version.reviewNotes}</p>}
+        {opts.error && <p role="alert">{opts.error}</p>}
+        <div class="review">
+          <section class="card">
+            <h2>Draft</h2>
+            <div class="protocol-body">{raw(renderMarkdown(opts.bodyMd ?? version.bodyMd))}</div>
+          </section>
+          <section class="card">
+            <h2>Sources</h2>
+            <ul>
+              {sources.map((s) => (
+                <li>
+                  {s.title ?? s.url}
+                  <br />
+                  <a href={s.url}>{s.url}</a>
+                  <br />
+                  <span class="muted">
+                    {(s.contentHash ?? '').slice(0, 12)} {fmt(s.fetchedAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+        {open && (
+          <>
+            <h2>Edit</h2>
+            <form method="post" action={`${base}/body`}>
+              <textarea name="body_md" rows={20}>
+                {opts.bodyMd ?? version.bodyMd}
+              </textarea>
+              <button type="submit">Save</button>
+            </form>
+            {version.status === 'draft' && (
+              <form method="post" action={`${base}/submit`}>
+                <button type="submit">Submit for review</button>
+              </form>
+            )}
+            <form method="post" action={`${base}/publish`}>
+              <label>
+                Notes <input name="notes" />
+              </label>
+              <button type="submit">Approve &amp; publish</button>
+            </form>
+            <form method="post" action={`${base}/reject`}>
+              <label>
+                Notes <input name="notes" required />
+              </label>
+              <button type="submit">Reject</button>
+            </form>
+          </>
+        )}
+        <p>
+          <a href={`/admin/protocols/${protocolId}`}>Back to protocol</a>
+        </p>
+      </>,
+      opts.status ?? 200,
+    );
+  };
+
+  const reviewAction =
+    (run: (versionId: number, form: Record<string, unknown>) => void, redisplay?: (form: Record<string, unknown>) => string | undefined) =>
+    async (c: Parameters<typeof page>[0] & { req: { param: (k: string) => string; parseBody: () => Promise<Record<string, unknown>> } }) => {
+      const protocolId = Number(c.req.param('id'));
+      const versionId = Number(c.req.param('vid'));
+      const version = getVersion(db, versionId);
+      if (!version || version.protocolId !== protocolId) return c.notFound();
+      const form = await c.req.parseBody();
+      try {
+        run(versionId, form);
+      } catch (e) {
+        if (e instanceof ProtocolError) {
+          if (e.code === 'not_found') return c.notFound();
+          const bodyMd = redisplay?.(form);
+          return reviewPage(c, protocolId, versionId, {
+            error: e.message,
+            status: e.code === 'invalid_transition' ? 409 : 400,
+            ...(bodyMd !== undefined ? { bodyMd } : {}),
+          });
+        }
+        throw e;
+      }
+      return c.redirect(`/admin/protocols/${protocolId}/versions/${versionId}`, 302);
+    };
+
+  app.get('/:id/versions/:vid', (c) => reviewPage(c, Number(c.req.param('id')), Number(c.req.param('vid'))));
+
+  app.post(
+    '/:id/versions/:vid/body',
+    reviewAction(
+      (vid, f) => void updateDraftBody(db, vid, str(f['body_md']), now()),
+      (f) => str(f['body_md']),
+    ),
+  );
+  app.post('/:id/versions/:vid/submit', reviewAction((vid) => void submitForReview(db, vid, now())));
+  app.post(
+    '/:id/versions/:vid/publish',
+    reviewAction((vid, f) => void publishVersion(db, vid, now(), str(f['notes']).trim() || undefined)),
+  );
+  app.post(
+    '/:id/versions/:vid/reject',
+    reviewAction((vid, f) => {
+      const notes = str(f['notes']).trim();
+      if (notes === '') throw new ProtocolError('invalid', 'Notes are required to reject a version');
+      void rejectVersion(db, vid, now(), notes);
+    }),
+  );
 
   app.get('/', (c) =>
     page(
