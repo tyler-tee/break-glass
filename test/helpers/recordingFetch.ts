@@ -36,9 +36,15 @@ function toResponse(f: Fixture): Response {
   });
 }
 
+export function resolveMode(raw: string | undefined): FixtureMode {
+  if (raw === undefined || raw === '') return 'replay';
+  if (raw === 'record' || raw === 'replay') return raw;
+  throw new Error(`FIXTURE_MODE must be "record" or "replay", got "${raw}"`);
+}
+
 export function recordingFetch(
   dir: string,
-  mode: FixtureMode = (process.env.FIXTURE_MODE as FixtureMode) ?? 'replay',
+  mode: FixtureMode = resolveMode(process.env.FIXTURE_MODE),
   real: typeof fetch = globalThis.fetch,
 ): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
@@ -48,21 +54,21 @@ export function recordingFetch(
     const key = fixtureKey(method, url, body);
     const file = path.join(dir, `${key}.json`);
 
-    if (mode === 'replay') {
-      if (!fs.existsSync(file)) throw new FixtureMissing(key, url);
-      return toResponse(JSON.parse(fs.readFileSync(file, 'utf8')) as Fixture);
+    if (mode === 'record') {
+      const res = await real(input, init);
+      const fixture: Fixture = {
+        method,
+        url,
+        status: res.status,
+        headers: { 'content-type': res.headers.get('content-type') },
+        body: await res.text(),
+      };
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(fixture, null, 2));
+      return toResponse(fixture);
     }
 
-    const res = await real(input, init);
-    const fixture: Fixture = {
-      method,
-      url,
-      status: res.status,
-      headers: { 'content-type': res.headers.get('content-type') },
-      body: await res.text(),
-    };
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(fixture, null, 2));
-    return toResponse(fixture);
+    if (!fs.existsSync(file)) throw new FixtureMissing(key, url);
+    return toResponse(JSON.parse(fs.readFileSync(file, 'utf8')) as Fixture);
   }) as typeof fetch;
 }

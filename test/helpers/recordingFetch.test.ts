@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { FixtureMissing, fixtureKey, recordingFetch } from './recordingFetch.js';
+import { FixtureMissing, fixtureKey, recordingFetch, resolveMode } from './recordingFetch.js';
 
 const URL_A = 'https://example.test/api/places?q=pharmacy';
 
@@ -72,5 +72,22 @@ describe('recordingFetch', () => {
 
     const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
     expect(files).toHaveLength(2);
+  });
+});
+
+describe('resolveMode', () => {
+  it('invalid FIXTURE_MODE throws', () => {
+    expect(() => resolveMode('Replay')).toThrow(/FIXTURE_MODE/);
+    expect(() => resolveMode('recrod')).toThrow(/FIXTURE_MODE/);
+  });
+
+  it('empty FIXTURE_MODE means replay', () => {
+    expect(resolveMode('')).toBe('replay');
+    expect(resolveMode(undefined)).toBe('replay');
+  });
+
+  it('accepts record and replay', () => {
+    expect(resolveMode('record')).toBe('record');
+    expect(resolveMode('replay')).toBe('replay');
   });
 });
