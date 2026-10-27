@@ -99,6 +99,8 @@ describe('family pages', () => {
     expect(html).toMatch(/<a class="directions" href="https:\/\/[^"]+"[^>]*>[\s\S]*?Directions/);
     expect(html).toContain('Ring bell');
     expect(html.indexOf('Ring bell')).toBeGreaterThan(html.indexOf('<details'));
+    expect(html).toContain('Hours unknown');
+    expect(html).toContain('<details');
     expect(html.indexOf('Hours unknown')).toBeLessThan(html.indexOf('<details'));
   });
 
