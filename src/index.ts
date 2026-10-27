@@ -1,3 +1,4 @@
+import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import { openDb } from './db/client.js';
@@ -9,6 +10,7 @@ import { startScheduler } from './jobs/scheduler.js';
 import { makeExtractor } from './services/llm/extract.js';
 import { createProvider } from './services/llm/index.js';
 import { newPlacesBudget } from './services/places/budget.js';
+import { createShutdown } from './shutdown.js';
 
 loadDotEnvFiles();
 
@@ -54,5 +56,20 @@ const app = createApp({
   ...(llm ? { llm } : {}),
 });
 
-serve({ fetch: app.fetch, port: env.PORT, hostname: '0.0.0.0' });
+const server = serve({ fetch: app.fetch, port: env.PORT, hostname: '0.0.0.0' });
 console.log(`Listening on http://0.0.0.0:${env.PORT}`);
+
+const shutdown = createShutdown({
+  stopScheduler: () => scheduler.stop(),
+  closeServer: () =>
+    new Promise<void>((resolve) => {
+      const http = server as unknown as Server;
+      http.close(() => resolve());
+      http.closeAllConnections();
+    }),
+  closeDb: () => (db as unknown as { $client: { close(): void } }).$client.close(),
+  log: console,
+  exit: (code) => process.exit(code),
+});
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));

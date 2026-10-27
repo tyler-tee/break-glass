@@ -104,20 +104,20 @@ In the Google Cloud console, also restrict the API key to "Places API (New)" onl
 - Schedules run in the home timezone set in Settings, not the container's. Both cron expressions are editable there.
 - The admin UI has "Run now" buttons for the location refresh and the protocol re-check.
 - Changing the HTML text extractor changes how source text is hashed, so every published protocol is flagged `needs_rereview` once on the next re-check. Re-publishing a protocol clears the flag.
-- Backup: stop the app so the WAL is checkpointed, then copy the database out of the volume with a one-shot container. The volume name is prefixed with the compose project name (usually the directory name), so look it up first:
+- Backup: stop the app, then copy `app.db`, `app.db-wal` and `app.db-shm` together out of the volume with a one-shot container. A clean stop (SIGTERM, which `docker compose stop` sends) checkpoints the WAL into `app.db`, but copying all three files keeps the backup complete even if the stop was not clean. The volume name is prefixed with the compose project name (usually the directory name), so look it up first:
 
   ```
   docker volume ls            # find <project>_bg-data
   docker compose stop app
-  docker run --rm -v <project>_bg-data:/data -v "$PWD":/backup debian:bookworm-slim cp /data/app.db /backup/app.db.bak
+  docker run --rm -v <project>_bg-data:/data -v "$PWD":/backup debian:bookworm-slim sh -c 'mkdir -p /backup/app-db && cp /data/app.db* /backup/app-db/'
   docker compose start app
   ```
 
-- Restore: stop the app, then replace the file from a one-shot container. The `node` user in the image is uid 1000, so the restored file must be owned by 1000:1000.
+- Restore: stop the app, then copy all three files back from a one-shot container (or only `app.db` when the backup has no `-wal` file). The `node` user in the image is uid 1000, so the restored files must be owned by 1000:1000.
 
   ```
   docker compose stop app
-  docker run --rm -v <project>_bg-data:/data -v "$PWD":/backup debian:bookworm-slim sh -c 'rm -f /data/app.db-wal /data/app.db-shm && cp /backup/app.db.bak /data/app.db && chown 1000:1000 /data/app.db'
+  docker run --rm -v <project>_bg-data:/data -v "$PWD":/backup debian:bookworm-slim sh -c 'rm -f /data/app.db /data/app.db-wal /data/app.db-shm && cp /backup/app-db/app.db* /data/ && chown 1000:1000 /data/app.db*'
   docker compose start app
   ```
 

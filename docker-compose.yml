@@ -1,6 +1,8 @@
 services:
   app:
     build: .
+    init: true
+    stop_grace_period: 20s
     ports:
       - "3000:3000"
     env_file: .env
