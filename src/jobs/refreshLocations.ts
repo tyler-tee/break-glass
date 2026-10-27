@@ -9,6 +9,8 @@ import {
   listRefreshable,
   updateLocationRow,
 } from '../features/locations/repo.js';
+import { applyExtraction } from '../services/llm/extract.js';
+import type { Extractor } from '../services/llm/extract.js';
 import {
   BudgetExhausted,
   PlacesError,
@@ -23,6 +25,7 @@ export type RefreshReport = {
   unchanged: number;
   failed: number;
   baselined: number;
+  extracted: number;
   callsUsed: number;
   stoppedEarly: boolean;
 };
@@ -34,15 +37,17 @@ export async function refreshLocations(
     env: Pick<Env, 'REFRESH_FAILURE_THRESHOLD' | 'RATING_WARN_DELTA'>;
     now: () => Date;
     log: Logger;
+    extract?: Extractor;
   },
 ): Promise<RefreshReport> {
-  const { places, env, now, log } = deps;
+  const { places, env, now, log, extract } = deps;
   const report: RefreshReport = {
     checked: 0,
     warned: 0,
     unchanged: 0,
     failed: 0,
     baselined: 0,
+    extracted: 0,
     callsUsed: 0,
     stoppedEarly: false,
   };
@@ -54,13 +59,20 @@ export async function refreshLocations(
       let next: TrackedFields | null = null;
       try {
         const details = await placeDetails(row.placeId!, places);
-        // LLM note fields are carried forward from the row until extraction exists.
-        next = normalizeTracked({
+        // LLM note fields are carried forward from the row unless extraction returns something.
+        let tracked: TrackedFields = {
           ...detailsToTracked(details),
           afterHoursNotes: row.afterHoursNotes,
           walkIns: row.walkIns,
           insuranceNotes: row.insuranceNotes,
-        });
+        };
+        const website = tracked.website ?? row.website;
+        if (extract && website) {
+          const extraction = await extract(website);
+          if (extraction) report.extracted++;
+          tracked = applyExtraction(tracked, extraction);
+        }
+        next = normalizeTracked(tracked);
       } catch (e) {
         if (!(e instanceof PlacesError || e instanceof TypeError)) throw e;
         log.warn(`Place details failed for ${row.placeId}: ${e.message}`);

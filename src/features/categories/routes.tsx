@@ -160,6 +160,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
         places: { ...deps.places, budget: new CallBudget(deps.env.PLACES_CALL_CAP) },
         now: deps.now ?? (() => new Date()),
         log: console,
+        ...(deps.extract ? { extract: deps.extract } : {}),
       });
       const q = new URLSearchParams({
         category: category.slug,

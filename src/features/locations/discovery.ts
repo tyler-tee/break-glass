@@ -11,6 +11,7 @@ import {
   textSearch,
   type PlacesDeps,
 } from '../../services/places/client.js';
+import type { Extractor } from '../../services/llm/extract.js';
 import type { PlaceDetails, PlaceSummary } from '../../services/places/types.js';
 import { getSettings } from '../admin/settingsRepo.js';
 import { getCategory } from '../categories/repo.js';
@@ -25,6 +26,7 @@ export type DiscoveryReport = {
   inserted: number;
   skipped: number;
   detailsFetched: number;
+  extracted: number;
   callsUsed: number;
   stoppedEarly: boolean;
 };
@@ -32,9 +34,9 @@ export type DiscoveryReport = {
 export async function runDiscovery(
   db: Db,
   categoryId: number,
-  deps: { places: PlacesDeps; now: () => Date; log: Logger },
+  deps: { places: PlacesDeps; now: () => Date; log: Logger; extract?: Extractor },
 ): Promise<DiscoveryReport> {
-  const { places, now, log } = deps;
+  const { places, now, log, extract } = deps;
   const { homeLat, homeLng, defaultRadiusMi } = getSettings(db);
   if (homeLat === null || homeLng === null) throw new NoHomeLocation('Home location is not set');
   const category = getCategory(db, categoryId);
@@ -48,6 +50,7 @@ export async function runDiscovery(
     inserted: 0,
     skipped: 0,
     detailsFetched: 0,
+    extracted: 0,
     callsUsed: 0,
     stoppedEarly: false,
   };
@@ -91,7 +94,7 @@ export async function runDiscovery(
         details = { ...summary, phone: null, website: null, hours: null };
       }
       const { address, phone, website, hours, businessStatus, rating, ratingCount } = detailsToTracked(details);
-      insertLocation(db, {
+      const inserted = insertLocation(db, {
         categoryId,
         placeId: details.placeId,
         name: details.name,
@@ -110,6 +113,25 @@ export async function runDiscovery(
         updatedAt: now(),
       });
       report.inserted++;
+
+      if (extract && website) {
+        try {
+          const e = await extract(website);
+          if (e) {
+            db.update(locations)
+              .set({
+                afterHoursNotes: e.afterHoursNotes.value,
+                walkIns: e.walkIns.value,
+                insuranceNotes: e.insuranceNotes.value,
+              })
+              .where(eq(locations.id, inserted.id))
+              .run();
+            report.extracted++;
+          }
+        } catch (err) {
+          log.warn(`Extraction failed for ${website}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
     }
   } catch (e) {
     if (!(e instanceof BudgetExhausted)) throw e;

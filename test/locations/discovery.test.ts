@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { asc, eq } from 'drizzle-orm';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, type AppDeps } from '../../src/app.js';
 import type { Db } from '../../src/db/client.js';
 import { locations, settings } from '../../src/db/schema.js';
@@ -11,6 +11,7 @@ import { getSettings } from '../../src/features/admin/settingsRepo.js';
 import { createCategory } from '../../src/features/categories/repo.js';
 import { NoHomeLocation, runDiscovery } from '../../src/features/locations/discovery.js';
 import { approveLocation } from '../../src/features/locations/service.js';
+import type { Extractor } from '../../src/services/llm/extract.js';
 import { CallBudget } from '../../src/services/places/client.js';
 import { adminLogin } from '../helpers/adminLogin.js';
 import { recordingFetch } from '../helpers/recordingFetch.js';
@@ -75,6 +76,29 @@ describe('runDiscovery', () => {
     expect(found.every((l) => l.status === 'candidate')).toBe(true);
     expect(found[0]!.hours?.periods['1']).toEqual([{ open: '0800', close: '1700' }]);
     expect(found[0]!.createdAt).toEqual(now);
+  });
+
+  it('discovery runs the extractor for candidates with websites', async () => {
+    const extract = vi.fn<Extractor>(async (website) =>
+      website !== 'https://near-dental.example'
+        ? null
+        : {
+            afterHoursNotes: { value: 'Call the on-call line', sourceUrl: null },
+            walkIns: { value: true, sourceUrl: null },
+            insuranceNotes: { value: 'Accepts Delta Dental', sourceUrl: null },
+          },
+    );
+    const report = await runDiscovery(db, categoryId, { ...discoveryDeps(), extract });
+    // Far Dental also has a website, so the extractor sees both; only Near gets notes.
+    expect(extract.mock.calls.map(([w]) => w).sort()).toEqual(['https://far-dental.example', 'https://near-dental.example']);
+    expect(report.extracted).toBe(1);
+    const near = rows().find((l) => l.placeId === 'ChIJnear')!;
+    expect(near).toMatchObject({
+      afterHoursNotes: 'Call the on-call line',
+      walkIns: true,
+      insuranceNotes: 'Accepts Delta Dental',
+    });
+    expect(rows().find((l) => l.placeId === 'ChIJfar')!.insuranceNotes).toBeNull();
   });
 
   it('skips places already stored as rejected', async () => {

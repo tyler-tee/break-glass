@@ -84,12 +84,15 @@ const MAX_REDIRECTS = 3;
 
 function isBlockedV4(addr: string): boolean {
   const parts = addr.split('.').map(Number);
-  const [a = 0, b = 0] = parts;
+  const [a = 0, b = 0, c = 0] = parts;
   if (a === 0 || a === 127 || a === 10) return true;
   if (a === 169 && b === 254) return true;
   if (a === 172 && b >= 16 && b <= 31) return true;
   if (a === 192 && b === 168) return true;
-  return a >= 224 && a <= 239;
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64.0.0/10
+  if (a === 192 && b === 0 && c === 0) return true; // 192.0.0.0/24
+  if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking 198.18.0.0/15
+  return a >= 224; // multicast 224/4 and reserved 240/4
 }
 
 function isBlockedIp(raw: string): boolean {
@@ -109,6 +112,8 @@ function isBlockedIp(raw: string): boolean {
   const first = parseInt(addr.split(':')[0] || '0', 16);
   if (first >= 0xfe80 && first <= 0xfebf) return true; // link-local fe80::/10
   if (first >= 0xfc00 && first <= 0xfdff) return true; // unique local fc00::/7
+  if (first === 0x2002) return true; // 6to4 2002::/16
+  if (first === 0x64 && parseInt(addr.split(':')[1] || '0', 16) === 0xff9b) return true; // NAT64 64:ff9b::/96
   return first >= 0xff00; // multicast ff00::/8
 }
 

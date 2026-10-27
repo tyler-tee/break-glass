@@ -1,0 +1,6 @@
+{
+  "model": "claude-haiku-5-5",
+  "system": "You are extracting facts for a family emergency directory.\nAnswer only from the page text given; never infer or invent.\nFor each field return null unless the page explicitly states it.\nsourceUrl must be one of the given page URLs, or null.\nKeep notes under 200 characters, plain text.\nwalkIns is true only if walk-ins are explicitly accepted, and false only if walk-ins are explicitly not accepted.",
+  "prompt": "### https://bad-dental.example/\nBad DentalBad Dental\nFamily dentistry.",
+  "raw": "not json at all"
+}
