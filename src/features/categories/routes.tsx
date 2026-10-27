@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import type { AppDeps } from '../../app.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
+import { CallBudget } from '../../services/places/client.js';
+import { NoHomeLocation, runDiscovery } from '../locations/discovery.js';
 import { CategoryError, createCategory, deleteCategory, getCategory, listCategories, updateCategory } from './repo.js';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -15,7 +17,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
   const { db } = deps;
   const app = new Hono();
 
-  const listPage = (c: Parameters<typeof page>[0], opts: { error?: string; status?: 200 | 409 } = {}) =>
+  const listPage = (c: Parameters<typeof page>[0], opts: { error?: string; status?: 200 | 400 | 409 } = {}) =>
     page(
       c,
       'Categories',
@@ -45,6 +47,9 @@ export function categoriesRoutes(deps: AppDeps): Hono {
                 <td>{cat.targetCount}</td>
                 <td>
                   <a href={`/admin/categories/${cat.id}/edit`}>Edit</a>
+                  <form method="post" action={`/admin/categories/${cat.id}/discover`}>
+                    <button type="submit">Discover</button>
+                  </form>
                   <form method="post" action={`/admin/categories/${cat.id}/delete`}>
                     <button type="submit">Delete</button>
                   </form>
@@ -142,6 +147,33 @@ export function categoriesRoutes(deps: AppDeps): Hono {
       throw e;
     }
     return c.redirect('/admin/categories', 302);
+  });
+
+  app.post('/:id/discover', async (c) => {
+    const id = Number(c.req.param('id'));
+    const category = getCategory(db, id);
+    if (!category) return c.notFound();
+    if (!deps.places) return listPage(c, { error: 'Set GOOGLE_PLACES_API_KEY to enable discovery', status: 400 });
+    try {
+      const report = await runDiscovery(db, id, {
+        places: { ...deps.places, budget: new CallBudget(deps.env.PLACES_CALL_CAP) },
+        now: deps.now ?? (() => new Date()),
+        log: console,
+      });
+      const q = new URLSearchParams({
+        category: category.slug,
+        inserted: String(report.inserted),
+        skipped: String(report.skipped),
+        calls: String(report.callsUsed),
+      });
+      if (report.stoppedEarly) q.set('stopped', '1');
+      return c.redirect(`/admin/candidates?${q}`, 302);
+    } catch (e) {
+      if (e instanceof NoHomeLocation) {
+        return listPage(c, { error: 'Set the home location in Settings first', status: 400 });
+      }
+      throw e;
+    }
   });
 
   app.post('/:id/delete', (c) => {

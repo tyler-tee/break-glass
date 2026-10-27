@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "url": "https://places.googleapis.com/v1/places/ChIJfar",
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"id\":\"ChIJfar\",\"displayName\":{\"text\":\"Far Dental\",\"languageCode\":\"en\"},\"formattedAddress\":\"900 N State St, Bountiful, UT 84010, USA\",\"nationalPhoneNumber\":\"(801) 555-0102\",\"websiteUri\":\"https://far-dental.example\",\"location\":{\"latitude\":40.9055,\"longitude\":-111.891},\"rating\":4.2,\"userRatingCount\":80,\"businessStatus\":\"OPERATIONAL\",\"regularOpeningHours\":{\"periods\":[{\"open\":{\"day\":1,\"hour\":8,\"minute\":0},\"close\":{\"day\":1,\"hour\":17,\"minute\":0}},{\"open\":{\"day\":2,\"hour\":8,\"minute\":0},\"close\":{\"day\":2,\"hour\":17,\"minute\":0}},{\"open\":{\"day\":3,\"hour\":8,\"minute\":0},\"close\":{\"day\":3,\"hour\":17,\"minute\":0}},{\"open\":{\"day\":4,\"hour\":8,\"minute\":0},\"close\":{\"day\":4,\"hour\":17,\"minute\":0}},{\"open\":{\"day\":5,\"hour\":8,\"minute\":0},\"close\":{\"day\":5,\"hour\":17,\"minute\":0}}],\"weekdayDescriptions\":[\"Monday: 8:00 AM – 5:00 PM\",\"Tuesday: 8:00 AM – 5:00 PM\",\"Wednesday: 8:00 AM – 5:00 PM\",\"Thursday: 8:00 AM – 5:00 PM\",\"Friday: 8:00 AM – 5:00 PM\"]}}"
+}

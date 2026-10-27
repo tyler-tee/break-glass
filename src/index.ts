@@ -13,7 +13,13 @@ try {
 const env = loadEnv(process.env);
 const db = openDb(env.DATABASE_PATH);
 runMigrations(db);
-const app = createApp({ db, env });
+const app = createApp({
+  db,
+  env,
+  places: env.GOOGLE_PLACES_API_KEY
+    ? { fetch: globalThis.fetch, apiKey: env.GOOGLE_PLACES_API_KEY }
+    : undefined,
+});
 
 serve({ fetch: app.fetch, port: env.PORT, hostname: '0.0.0.0' });
 console.log(`Listening on http://0.0.0.0:${env.PORT}`);

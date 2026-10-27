@@ -17,6 +17,14 @@ const searchBody = (query: string) =>
     },
   });
 
+const weekdayText = [
+  'Monday: 8:00 AM – 5:00 PM',
+  'Tuesday: 8:00 AM – 5:00 PM',
+  'Wednesday: 8:00 AM – 5:00 PM',
+  'Thursday: 8:00 AM – 5:00 PM',
+  'Friday: 8:00 AM – 5:00 PM',
+];
+
 const weekday = [1, 2, 3, 4, 5].map((day) => ({
   open: { day, hour: 8, minute: 0 },
   close: { day, hour: 17, minute: 0 },
@@ -82,6 +90,25 @@ function main(): void {
   );
   authorFixture(
     FIXTURE_DIR,
+    { method: 'GET', url: `${BASE}/places/ChIJfar` },
+    {
+      status: 200,
+      json: {
+        id: 'ChIJfar',
+        displayName: { text: 'Far Dental', languageCode: 'en' },
+        formattedAddress: '900 N State St, Bountiful, UT 84010, USA',
+        nationalPhoneNumber: '(801) 555-0102',
+        websiteUri: 'https://far-dental.example',
+        location: { latitude: 40.9055, longitude: -111.891 },
+        rating: 4.2,
+        userRatingCount: 80,
+        businessStatus: 'OPERATIONAL',
+        regularOpeningHours: { periods: weekday, weekdayDescriptions: weekdayText },
+      },
+    },
+  );
+  authorFixture(
+    FIXTURE_DIR,
     { method: 'GET', url: `${BASE}/places/ChIJgone` },
     { status: 404, json: { error: { code: 404, message: 'Place not found', status: 'NOT_FOUND' } } },
   );
@@ -119,6 +146,27 @@ function main(): void {
       body: JSON.stringify({ textQuery: 'nowhere zzz', pageSize: 10 }),
     },
     { status: 200, json: {} },
+  );
+  // Separate address from the one above so places.test.ts keeps its own expected coordinates.
+  authorFixture(
+    FIXTURE_DIR,
+    {
+      method: 'POST',
+      url: `${BASE}/places:searchText`,
+      body: JSON.stringify({ textQuery: '200 S Main St, Salt Lake City', pageSize: 10 }),
+    },
+    {
+      status: 200,
+      json: {
+        places: [
+          {
+            id: 'ChIJhome',
+            displayName: { text: 'Home Address' },
+            location: { latitude: 40.7684, longitude: -111.8898 },
+          },
+        ],
+      },
+    },
   );
 }
 

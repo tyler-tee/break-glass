@@ -3,8 +3,9 @@ import type { AppDeps } from '../../app.js';
 import type { LocationStatus } from '../../domain/types.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
-import { listCategories } from '../categories/repo.js';
-import { getLocation, listLocations } from './repo.js';
+import { ReviewQueue } from '../../web/components/ReviewQueue.js';
+import { getCategoryBySlug, getCategory, listCategories } from '../categories/repo.js';
+import { getLocation, listLocations, type Location } from './repo.js';
 import {
   LocationError,
   approveLocation,
@@ -20,6 +21,12 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number | null => (str(v).trim() === '' ? null : Number(str(v)));
 const tri = (v: unknown): boolean | null => (str(v) === 'yes' ? true : str(v) === 'no' ? false : null);
 const triValue = (v: boolean | null | undefined): string => (v === true ? 'yes' : v === false ? 'no' : '');
+
+const reportLine = (q: Record<string, string>): string | null => {
+  if (q['inserted'] === undefined) return null;
+  const stopped = q['stopped'] ? ' (stopped early: call cap reached)' : '';
+  return `Discovery: inserted ${q['inserted']}, skipped ${q['skipped'] ?? '0'}, calls ${q['calls'] ?? '0'}${stopped}`;
+};
 
 const SECTIONS: [LocationStatus, string][] = [
   ['candidate', 'Candidates'],
@@ -266,15 +273,22 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
     return c.redirect('/admin/locations', 302);
   });
 
-  const transitionRoute = (act: typeof approveLocation) => (c: Parameters<typeof page>[0] & { req: { param(n: string): string } }) => {
+  const transitionRoute = (act: typeof approveLocation) => async (c: Parameters<typeof page>[0] & { req: { param(n: string): string } }) => {
+    const id = Number(c.req.param('id'));
+    const body = await c.req.parseBody();
+    let loc: Location;
     try {
-      act(db, Number(c.req.param('id')), now());
+      loc = act(db, id, now());
     } catch (e) {
       if (e instanceof LocationError) {
         if (e.code === 'not_found') return c.notFound();
         return listPage(c, { error: e.message, status: 409 });
       }
       throw e;
+    }
+    if (str(body['return']) !== '') {
+      const slug = getCategory(db, loc.categoryId)?.slug;
+      if (slug) return c.redirect(`/admin/candidates?category=${encodeURIComponent(slug)}`, 302);
     }
     return c.redirect('/admin/locations', 302);
   };
@@ -295,6 +309,69 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
       throw e;
     }
     return c.redirect('/admin/locations', 302);
+  });
+
+  return app;
+}
+
+export function candidatesRoutes(deps: AppDeps): Hono {
+  const { db } = deps;
+  const app = new Hono();
+
+  app.get('/', (c) => {
+    const slug = c.req.query('category');
+    const category = slug ? getCategoryBySlug(db, slug) : null;
+    if (slug && !category) return c.notFound();
+    if (!category) {
+      return page(
+        c,
+        'Candidates',
+        <>
+          <h1>Candidates</h1>
+          <AdminNav />
+          <ul>
+            {listCategories(db).map((cat) => (
+              <li>
+                <a href={`/admin/candidates?category=${encodeURIComponent(cat.slug)}`}>{cat.name}</a>
+              </li>
+            ))}
+          </ul>
+        </>,
+      );
+    }
+    const report = reportLine(c.req.query());
+    const items = listLocations(db)
+      .filter((l) => l.status === 'candidate' && l.categoryId === category.id)
+      .map((l) => ({
+        id: l.id,
+        title: l.name,
+        subtitle: [
+          l.distanceMi === null ? null : `${l.distanceMi.toFixed(1)} mi`,
+          l.rating === null ? null : `${l.rating} stars`,
+          l.phone,
+        ]
+          .filter((p) => p !== null)
+          .join(' · '),
+      }));
+    return page(
+      c,
+      'Candidates',
+      <>
+        <h1>Candidates: {category.name}</h1>
+        <AdminNav />
+        {report && <p role="status">{report}</p>}
+        <ReviewQueue
+          title="Candidates"
+          empty="No candidates to review."
+          items={items}
+          approveAction={(id) => `/admin/locations/${id}/approve`}
+          rejectAction={(id) => `/admin/locations/${id}/reject`}
+        />
+        <p>
+          <a href="/admin/candidates">All categories</a>
+        </p>
+      </>,
+    );
   });
 
   return app;
