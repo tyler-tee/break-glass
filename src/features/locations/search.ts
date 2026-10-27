@@ -21,8 +21,16 @@ export function toView(db: Db, row: VisibleLocationRow, now: Date, tz: string): 
   return { ...row, openNow: isOpenNow(row.hours, now, tz), openChanges: listOpenChanges(db, row.id) };
 }
 
+// A closure counts when the row says so or when refresh has an open change reporting it.
+export function isReportedClosed(view: LocationView): boolean {
+  return (
+    view.businessStatus === 'CLOSED_PERMANENTLY' ||
+    view.openChanges.some((c) => c.field === 'businessStatus' && c.newValue === 'CLOSED_PERMANENTLY')
+  );
+}
+
 export function sortForFamily(views: LocationView[]): LocationView[] {
-  const rank = (v: LocationView) => (v.businessStatus === 'CLOSED_PERMANENTLY' ? 1 : 0);
+  const rank = (v: LocationView) => (isReportedClosed(v) ? 1 : 0);
   return [...views].sort((a, b) => {
     if (rank(a) !== rank(b)) return rank(a) - rank(b);
     if (a.distanceMi === b.distanceMi) return 0;

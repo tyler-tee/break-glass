@@ -6,6 +6,8 @@ import { locationChanges, locationSnapshots, locations } from '../../src/db/sche
 import { hashTracked, normalizeTracked } from '../../src/domain/snapshot.js';
 import type { TrackedFields } from '../../src/domain/types.js';
 import { createCategory } from '../../src/features/categories/repo.js';
+import { createApp } from '../../src/app.js';
+import { loadEnv } from '../../src/env.js';
 import { refreshLocations } from '../../src/jobs/refreshLocations.js';
 import { CallBudget } from '../../src/services/places/client.js';
 import { recordingFetch } from '../helpers/recordingFetch.js';
@@ -165,5 +167,42 @@ describe('refreshLocations', () => {
     expect(report).toMatchObject({ checked: 1, unchanged: 1, warned: 0 });
     expect(changesOf(id)).toHaveLength(0);
     expect(rowOf(id).status).toBe('approved');
+  });
+
+  it('a closure found by refresh shows as reported closed, sorts last, and is in the API', async () => {
+    const hours = { periods: nearHours.periods, weekdayText: nearHours.weekdayText };
+    const shutSnap = normalizeTracked({
+      name: 'Shut Dental',
+      address: '5 Shut St, Salt Lake City, UT 84101, USA',
+      phone: '(801) 555-0111',
+      website: null,
+      hours,
+      businessStatus: 'OPERATIONAL',
+      rating: 4.1,
+      ratingCount: 30,
+    });
+    const shutId = addLocation(
+      { name: 'Shut Dental', placeId: 'ChIJshut', distanceMi: 0.1, phone: '(801) 555-0111' },
+      shutSnap,
+    );
+    addLocation({ name: 'Far Dental', placeId: 'ChIJother', distanceMi: 9 });
+    await refreshLocations(db, deps());
+    expect(rowOf(shutId).status).toBe('warn');
+    expect(rowOf(shutId).businessStatus).toBeNull();
+
+    const app = createApp({
+      db,
+      env: loadEnv({ SESSION_SECRET: 's'.repeat(32), ADMIN_PASSWORD_HASH: 'x' }),
+      now: () => now,
+    });
+    const html = await (await app.request('/search?q=dental')).text();
+    expect(html).toContain('Reported closed');
+    expect(html.indexOf('Shut Dental')).toBeGreaterThan(html.indexOf('Far Dental'));
+    const api = (await (await app.request('/api/locations?q=dental')).json()) as {
+      categories: { locations: { name: string; reportedClosed: boolean }[] }[];
+    };
+    const byName = Object.fromEntries(api.categories.flatMap((g) => g.locations).map((l) => [l.name, l.reportedClosed]));
+    expect(byName['Shut Dental']).toBe(true);
+    expect(byName['Far Dental']).toBe(false);
   });
 });

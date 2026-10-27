@@ -4,6 +4,7 @@ import { requestClock } from '../clock.js';
 import { getCategoryBySlug, listCategories } from '../categories/repo.js';
 import {
   getVisibleLocation,
+  isReportedClosed,
   listVisibleByCategory,
   listVisibleGrouped,
   searchLocations,
@@ -26,6 +27,7 @@ export function toApiLocation(v: LocationView) {
     rating: v.rating,
     ratingCount: v.ratingCount,
     businessStatus: v.businessStatus,
+    reportedClosed: isReportedClosed(v),
     hours: v.hours,
     afterHoursNotes: v.afterHoursNotes,
     walkIns: v.walkIns,

@@ -1,5 +1,5 @@
 import type { FC } from 'hono/jsx';
-import type { LocationView } from '../../features/locations/search.js';
+import { isReportedClosed, type LocationView } from '../../features/locations/search.js';
 import { formatHHMM, formatMiles, mapsHref, telHref } from '../format.js';
 import { WarningBadge } from './WarningBadge.js';
 
@@ -13,7 +13,7 @@ export const LocationCard: FC<{ location: LocationView; showCategory?: boolean }
   showCategory,
 }) => {
   const miles = formatMiles(l.distanceMi);
-  const closed = l.businessStatus === 'CLOSED_PERMANENTLY';
+  const closed = isReportedClosed(l);
   const summary = l.openChanges.length
     ? [...new Set(l.openChanges.map((c) => c.field))].join(', ')
     : 'Details changed';

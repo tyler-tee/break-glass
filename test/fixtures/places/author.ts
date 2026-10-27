@@ -138,6 +138,24 @@ function main(): void {
   );
   authorFixture(
     FIXTURE_DIR,
+    { method: 'GET', url: `${BASE}/places/ChIJshut` },
+    {
+      status: 200,
+      json: {
+        id: 'ChIJshut',
+        displayName: { text: 'Shut Dental', languageCode: 'en' },
+        formattedAddress: '5 Shut St, Salt Lake City, UT 84101, USA',
+        nationalPhoneNumber: '(801) 555-0111',
+        location: { latitude: 40.762, longitude: -111.891 },
+        rating: 4.1,
+        userRatingCount: 30,
+        businessStatus: 'CLOSED_PERMANENTLY',
+        regularOpeningHours: { periods: weekday, weekdayDescriptions: weekdayText },
+      },
+    },
+  );
+  authorFixture(
+    FIXTURE_DIR,
     { method: 'GET', url: `${BASE}/places/ChIJgone` },
     { status: 404, json: { error: { code: 404, message: 'Place not found', status: 'NOT_FOUND' } } },
   );
