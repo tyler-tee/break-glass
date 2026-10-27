@@ -29,6 +29,11 @@ const reportLine = (q: Record<string, string>): string | null => {
   return `Discovery: inserted ${q['inserted']}, skipped ${q['skipped'] ?? '0'}, calls ${q['calls'] ?? '0'}${stopped}`;
 };
 
+/** Accepts only same-site admin paths; anything else yields null. */
+export function safeReturnTo(value: unknown): string | null {
+  return typeof value === 'string' && value.startsWith('/admin/') && !value.includes('//') ? value : null;
+}
+
 const SECTIONS: [LocationStatus, string][] = [
   ['candidate', 'Candidates'],
   ['approved', 'Approved'],
@@ -286,9 +291,7 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
       }
       throw e;
     }
-    const returnTo = str(body['return_to']);
-    const safe = returnTo.startsWith('/admin/') && !returnTo.includes('//');
-    return c.redirect(safe ? returnTo : '/admin/locations', 302);
+    return c.redirect(safeReturnTo(body['return_to']) ?? '/admin/locations', 302);
   };
 
   app.post('/:id/approve', transitionRoute(approveLocation));

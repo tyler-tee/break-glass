@@ -7,6 +7,7 @@ import { seed } from '../../src/db/seed.js';
 import { hashTracked, trackedFromLocation } from '../../src/domain/snapshot.js';
 import { loadEnv } from '../../src/env.js';
 import { hashPassword } from '../../src/features/admin/auth.js';
+import { safeReturnTo } from '../../src/features/locations/adminRoutes.js';
 import { LocationError, reapproveLocation } from '../../src/features/locations/service.js';
 import { adminLogin } from '../helpers/adminLogin.js';
 import { createTestDb } from '../helpers/testDb.js';
@@ -141,5 +142,47 @@ describe('re-approve', () => {
     const res = await post(`/admin/locations/${loc.id}/reapprove`, form({ return_to: '//evil.example' }));
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/admin/locations');
+  });
+
+  it('safeReturnTo accepts only /admin/ paths', () => {
+    expect(safeReturnTo('/admin/warn')).toBe('/admin/warn');
+    expect(safeReturnTo('/adminx')).toBeNull();
+    expect(safeReturnTo('https://evil.example/admin/')).toBeNull();
+    expect(safeReturnTo('//evil.example')).toBeNull();
+    expect(safeReturnTo(undefined)).toBeNull();
+  });
+
+  it.each([
+    ['/adminx', '/admin/locations'],
+    ['https://evil.example/admin/', '/admin/locations'],
+    ['/admin/warn', '/admin/warn'],
+  ])('return_to %s redirects to %s', async (returnTo, expected) => {
+    const loc = warnRow();
+    const res = await post(`/admin/locations/${loc.id}/reapprove`, form({ return_to: returnTo }));
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(expected);
+  });
+
+  it('reapprove throws invalid_transition for candidate and rejected rows', () => {
+    for (const status of ['candidate', 'rejected'] as const) {
+      const loc = db
+        .insert(locations)
+        .values({ categoryId: dentistId(), name: `${status} Dental`, status, createdAt: now, updatedAt: now })
+        .returning()
+        .get();
+      expect(() => reapproveLocation(db, loc.id, now)).toThrow(expect.objectContaining({ code: 'invalid_transition' }));
+      expect(row(loc.id).status).toBe(status);
+    }
+  });
+
+  it('reapprove route is 409 for a candidate', async () => {
+    const loc = db
+      .insert(locations)
+      .values({ categoryId: dentistId(), name: 'Cand Dental', status: 'candidate', createdAt: now, updatedAt: now })
+      .returning()
+      .get();
+    const res = await post(`/admin/locations/${loc.id}/reapprove`);
+    expect(res.status).toBe(409);
+    expect(row(loc.id).status).toBe('candidate');
   });
 });
