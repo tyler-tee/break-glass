@@ -7,7 +7,9 @@ import { loadDotEnvFiles, loadEnv } from './env.js';
 import { recheckProtocols } from './jobs/recheckProtocols.js';
 import { refreshLocations } from './jobs/refreshLocations.js';
 import { startScheduler } from './jobs/scheduler.js';
+import { installState } from './features/admin/install.js';
 import { createSecretsStore } from './features/admin/secrets.js';
+import { createSetupCodeManager } from './features/admin/setupCode.js';
 import { newPlacesBudget } from './services/places/budget.js';
 import { makeServiceResolver } from './services/resolver.js';
 import { createShutdown } from './shutdown.js';
@@ -47,6 +49,8 @@ const scheduler = startScheduler({
   log: console,
 });
 
+// One manager for the whole process, shared with the app, so the code printed here is the one /setup accepts.
+const setupCode = createSetupCodeManager({ log: console });
 const app = createApp({
   db,
   env,
@@ -54,10 +58,13 @@ const app = createApp({
   resolve,
   scheduler,
   siteFetch: globalThis.fetch,
+  setupCode,
 });
 
 const server = serve({ fetch: app.fetch, port: env.PORT, hostname: '0.0.0.0' });
 console.log(`Listening on http://0.0.0.0:${env.PORT}`);
+// Unclaimed (no admin password in env or DB): print the one-time setup code. Never prints the password or hashes.
+if (installState({ db, secrets }) === 'unclaimed') setupCode.ensure();
 
 const shutdown = createShutdown({
   stopScheduler: () => scheduler.stop(),

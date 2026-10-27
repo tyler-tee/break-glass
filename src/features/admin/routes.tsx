@@ -42,18 +42,32 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
       { layout: 'auth' },
     );
 
-  app.get('/login', (c) => loginPage(c, safeNext(c.req.query('next'))));
+  // Unclaimed install: every /admin/* (login included) goes to the public claim page. ensure() makes sure a
+  // code exists and is printed, e.g. after the reset CLI cleared the hash while this server kept running.
+  app.use('*', async (c, next) => {
+    if (installState(deps) === 'unclaimed') {
+      deps.setupCode.ensure();
+      return c.redirect('/setup', 302);
+    }
+    await next();
+  });
+
+  // An absent or empty next stays empty in the form so login can tell "no destination" from "/admin".
+  const nextField = (raw: unknown): string => (typeof raw === 'string' && raw !== '' ? safeNext(raw) : '');
+
+  app.get('/login', (c) => loginPage(c, nextField(c.req.query('next'))));
 
   app.post('/login', async (c) => {
     const body = await c.req.parseBody();
-    const next = safeNext(body['next']);
+    const next = nextField(body['next']);
     const password = typeof body['password'] === 'string' ? body['password'] : '';
-    // No hash yet (unclaimed install) verifies against '' and always fails.
     if (!(await verifyPassword(password, secrets.getAdminHash() ?? ''))) {
       return loginPage(c, next, 401);
     }
     await createSession(c, secrets.getSessionSecret(), now());
-    return c.redirect(next, 302);
+    // Resume the first-run wizard when the admin did not ask for a specific page.
+    if (next === '' && installState(deps) === 'incomplete') return c.redirect('/admin/setup', 302);
+    return c.redirect(next || '/admin', 302);
   });
 
   app.use('*', requireAdmin(() => secrets.getSessionSecret(), now));

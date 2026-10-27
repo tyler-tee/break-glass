@@ -17,6 +17,8 @@ import { installState } from './features/admin/install.js';
 import { settings } from './db/schema.js';
 import { createSecretsStore, type SecretsStore } from './features/admin/secrets.js';
 import { makeServiceResolver, type PlacesDep, type ServiceResolver } from './services/resolver.js';
+import { createSetupCodeManager, type SetupCodeManager } from './features/admin/setupCode.js';
+import { setupClaimRoutes } from './features/admin/setupClaim.js';
 
 export type AppDeps = { db: Db; env: Env; now?: () => Date; scheduler?: SchedulerHandle;
   // Static service deps (tests inject fakes); read them via placesOf/llmOf/extractOf so the resolver wins.
@@ -27,15 +29,18 @@ export type AppDeps = { db: Db; env: Env; now?: () => Date; scheduler?: Schedule
   lookup?: LookupFn;
   secrets?: SecretsStore;
   resolve?: ServiceResolver;
+  /** One-time setup code + limiter. Shared with index.ts so the boot print and /setup see one code. */
+  setupCode?: SetupCodeManager;
 };
 
-/** AppDeps after createApp has filled in the secrets store and service resolver. */
-export type ResolvedAppDeps = AppDeps & { secrets: SecretsStore; resolve: ServiceResolver };
+/** AppDeps after createApp has filled in the secrets store, service resolver and setup-code manager. */
+export type ResolvedAppDeps = AppDeps & { secrets: SecretsStore; resolve: ServiceResolver; setupCode: SetupCodeManager };
 
 export function createApp(input: AppDeps): Hono {
   // Fill in place (not a copy) so sub-routers and the caller share one deps object, as before.
   input.secrets ??= createSecretsStore(input.db, input.env);
   input.resolve ??= makeServiceResolver(input.db, input.env, input.secrets);
+  input.setupCode ??= createSetupCodeManager(input.now ? { now: input.now } : {});
   const deps = input as ResolvedAppDeps;
   const app = new Hono();
   const now = deps.now ?? (() => new Date());
@@ -83,6 +88,7 @@ export function createApp(input: AppDeps): Hono {
     }
   });
   registerAssets(app);
+  app.route('/setup', setupClaimRoutes(deps)); // public; POST is same-origin checked inside
   app.route('/', familyRoutes(deps));
   app.route('/api', apiRoutes(deps));
   app.route('/admin', adminRoutes(deps));

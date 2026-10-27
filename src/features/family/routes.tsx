@@ -5,6 +5,7 @@ import { settings } from '../../db/schema.js';
 import { Icon } from '../../web/components/Icon.js';
 import { splitSopSections } from '../../web/protocolSections.js';
 import type { AppDeps } from '../../app.js';
+import { installState } from '../admin/install.js';
 import { requestClock } from '../clock.js';
 import { LocationCard } from '../../web/components/LocationCard.js';
 import { WarningBadge } from '../../web/components/WarningBadge.js';
@@ -20,6 +21,20 @@ export function familyRoutes(deps: AppDeps): Hono {
   const app = new Hono();
 
   app.get('/', (c) => {
+    // Until someone claims the install there is nothing for the family yet; point at /setup instead.
+    if (deps.secrets && installState({ db, secrets: deps.secrets }) === 'unclaimed') {
+      return page(
+        c,
+        'Not set up yet',
+        <section class="setup-card" aria-labelledby="unclaimed-title">
+          <h1 id="unclaimed-title">This toolkit is not set up yet</h1>
+          <p>Whoever runs the server needs to finish setting it up before your family can use it.</p>
+          <a class="btn" href="/setup">
+            Set it up
+          </a>
+        </section>,
+      );
+    }
     const cats = listCategories(db);
     const stored =
       db.select({ n: settings.emergencyNumber }).from(settings).where(eq(settings.id, 1)).get()?.n?.trim() || '';
