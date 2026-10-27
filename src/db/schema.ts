@@ -144,3 +144,9 @@ export const protocolSources = sqliteTable('protocol_sources', {
   fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }),
   contentHash: text('content_hash'),
 });
+
+export const placesUsage = sqliteTable('places_usage', {
+  month: text('month').primaryKey(),
+  calls: integer('calls').notNull().default(0),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});

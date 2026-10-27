@@ -25,7 +25,9 @@ const triValue = (v: boolean | null | undefined): string => (v === true ? 'yes' 
 
 const reportLine = (q: Record<string, string>): string | null => {
   if (q['inserted'] === undefined) return null;
-  const stopped = q['stopped'] ? ' (stopped early: call cap reached)' : '';
+  const stopped = q['stopped']
+    ? ` (stopped early: ${q['stopped'] === 'month' ? 'monthly' : 'per-run'} call cap reached)`
+    : '';
   return `Discovery: inserted ${q['inserted']}, skipped ${q['skipped'] ?? '0'}, calls ${q['calls'] ?? '0'}${stopped}`;
 };
 

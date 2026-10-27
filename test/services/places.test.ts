@@ -53,17 +53,30 @@ describe('places client', () => {
       name: 'Near Dental Group',
       lat: 40.775,
       lng: -111.891,
-      rating: 4.6,
-      ratingCount: 120,
+      rating: null,
+      ratingCount: null,
       businessStatus: 'OPERATIONAL',
     });
     expect(typeof out[1].lat).toBe('number');
     expect(out[1].lng).toBe(-111.891);
     const h = captured as Record<string, string>;
     expect(h['X-Goog-FieldMask']).toBe(
-      'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.businessStatus',
+      'places.id,places.displayName,places.formattedAddress,places.location,places.businessStatus',
     );
     expect(h['X-Goog-Api-Key']).toBe('test-key');
+  });
+
+  it('textSearch mask excludes rating', async () => {
+    const real = recordingFetch(FIXTURE_DIR, 'replay');
+    let mask = '';
+    const spy = ((input: string | URL | Request, init?: RequestInit) => {
+      mask = (init?.headers as Record<string, string>)['X-Goog-FieldMask'] ?? '';
+      return real(input, init);
+    }) as typeof fetch;
+    const out = await textSearch('emergency dentist', BIAS, deps({ fetch: spy }));
+    expect(mask).not.toContain('rating');
+    expect(mask).not.toContain('userRatingCount');
+    expect(out.every((p) => p.rating === null && p.ratingCount === null)).toBe(true);
   });
 
   it('textSearch with no results returns []', async () => {

@@ -28,6 +28,7 @@ export type RefreshReport = {
   extracted: number;
   callsUsed: number;
   stoppedEarly: boolean;
+  stopReason: 'run' | 'month' | null;
 };
 
 export async function refreshLocations(
@@ -50,6 +51,7 @@ export async function refreshLocations(
     extracted: 0,
     callsUsed: 0,
     stoppedEarly: false,
+    stopReason: null,
   };
   const finish = (): RefreshReport => ({ ...report, callsUsed: places.budget.used });
 
@@ -133,6 +135,8 @@ export async function refreshLocations(
     } catch (e) {
       if (e instanceof BudgetExhausted) {
         report.stoppedEarly = true;
+        report.stopReason = e.reason;
+        log.warn(`Refresh stopped early (${e.reason} cap): ${e.message}`);
         return finish();
       }
       log.error(`Refresh failed for location ${row.id}: ${e instanceof Error ? e.message : String(e)}`);

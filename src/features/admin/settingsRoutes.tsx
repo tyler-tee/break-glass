@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import type { AppDeps } from '../../app.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
-import { CallBudget, PlacesError, geocode } from '../../services/places/client.js';
+import { newPlacesBudget } from '../../services/places/budget.js';
+import { PlacesError, geocode } from '../../services/places/client.js';
 import { page } from '../../web/Layout.js';
 import { placesErrorPage } from '../../web/placesErrorPage.js';
 import { SettingsValidationError, getSettings, updateSettings, type Settings } from './settingsRepo.js';
@@ -110,7 +111,7 @@ export function settingsRoutes(deps: AppDeps): Hono {
     if (address === '') return formPage(c, getSettings(deps.db), { error: 'Address is required', status: 400 });
     let hit: Awaited<ReturnType<typeof geocode>>;
     try {
-      hit = await geocode(address, { ...deps.places, budget: new CallBudget(deps.env.PLACES_CALL_CAP) });
+      hit = await geocode(address, { ...deps.places, budget: newPlacesBudget(deps.db, deps.env, deps.now) });
     } catch (e) {
       if (e instanceof PlacesError) return placesErrorPage(c, e);
       throw e;

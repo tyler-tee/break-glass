@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { eq } from 'drizzle-orm';
+import { loadDotEnvFiles } from '../env.js';
 import { haversineMi } from '../domain/ranking.js';
 import type { LatLng, LocationStatus, WeeklyHours } from '../domain/types.js';
 import { openDb, type Db } from './client.js';
@@ -139,11 +140,7 @@ export function seed(db: Db, opts: { home?: LatLng } = {}): void {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try {
-    process.loadEnvFile('.env');
-  } catch {
-    // .env is optional for seeding
-  }
+  loadDotEnvFiles();
   const db = openDb(process.env.DATABASE_PATH ?? './data/app.db');
   runMigrations(db);
   seed(db);

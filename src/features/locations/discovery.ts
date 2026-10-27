@@ -29,6 +29,7 @@ export type DiscoveryReport = {
   extracted: number;
   callsUsed: number;
   stoppedEarly: boolean;
+  stopReason: 'run' | 'month' | null;
 };
 
 export async function runDiscovery(
@@ -53,6 +54,12 @@ export async function runDiscovery(
     extracted: 0,
     callsUsed: 0,
     stoppedEarly: false,
+    stopReason: null,
+  };
+  const stop = (e: BudgetExhausted): void => {
+    report.stoppedEarly = true;
+    report.stopReason = e.reason;
+    log.warn(`Discovery stopped early (${e.reason} cap): ${e.message}`);
   };
   const finish = (): DiscoveryReport => ({ ...report, callsUsed: places.budget.used });
 
@@ -83,16 +90,31 @@ export async function runDiscovery(
       .map((p) => ({ ...p, distanceMi: haversineMi(home, { lat: p.lat, lng: p.lng }) }))
       .filter((p) => p.distanceMi <= radiusMi);
 
-    for (const summary of rankByDistanceThenRating(fresh)) {
-      let details: PlaceDetails;
-      try {
-        details = await placeDetails(summary.placeId, places);
-        report.detailsFetched++;
-      } catch (e) {
-        if (!(e instanceof PlacesError)) throw e;
-        log.warn(`Place details failed for ${summary.placeId}: ${e.message}`);
-        details = { ...summary, phone: null, website: null, hours: null };
+    // Search no longer returns ratings (cheaper SKU), so fetch details nearest-first and
+    // rank by distance then rating once the ratings are known.
+    const enriched: { summary: (typeof fresh)[number]; details: PlaceDetails }[] = [];
+    try {
+      for (const summary of [...fresh].sort((a, b) => a.distanceMi - b.distanceMi)) {
+        let details: PlaceDetails;
+        try {
+          details = await placeDetails(summary.placeId, places);
+          report.detailsFetched++;
+        } catch (e) {
+          if (!(e instanceof PlacesError)) throw e;
+          log.warn(`Place details failed for ${summary.placeId}: ${e.message}`);
+          details = { ...summary, phone: null, website: null, hours: null };
+        }
+        enriched.push({ summary, details });
       }
+    } catch (e) {
+      if (!(e instanceof BudgetExhausted)) throw e;
+      stop(e);
+    }
+
+    const ranked = rankByDistanceThenRating(
+      enriched.map((x) => ({ ...x, distanceMi: x.summary.distanceMi, rating: x.details.rating })),
+    );
+    for (const { summary, details } of ranked) {
       const { address, phone, website, hours, businessStatus, rating, ratingCount } = detailsToTracked(details);
       const inserted = insertLocation(db, {
         categoryId,
@@ -135,7 +157,7 @@ export async function runDiscovery(
     }
   } catch (e) {
     if (!(e instanceof BudgetExhausted)) throw e;
-    report.stoppedEarly = true;
+    stop(e);
   }
   return finish();
 }

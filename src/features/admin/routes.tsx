@@ -8,6 +8,7 @@ import { candidatesRoutes, locationsAdminRoutes, warnRoutes } from '../locations
 import { protocolsAdminRoutes } from '../protocols/adminRoutes.js';
 import { settingsRoutes } from './settingsRoutes.js';
 import type { JobName, RunResult } from '../../jobs/scheduler.js';
+import { newPlacesBudget } from '../../services/places/budget.js';
 import { SESSION_COOKIE, createSession, requireAdmin, verifyPassword } from './auth.js';
 
 const JOB_NAMES: readonly string[] = ['refreshLocations', 'recheckProtocols'];
@@ -56,6 +57,8 @@ export function adminRoutes(deps: AppDeps): Hono {
   app.get('/', (c) => {
     const job = c.req.query('job');
     const result = c.req.query('result');
+    const monthUsed = newPlacesBudget(deps.db, env, now).monthUsed();
+    const monthlyCap = env.PLACES_MONTHLY_CAP;
     return page(
       c,
       'Admin',
@@ -66,6 +69,12 @@ export function adminRoutes(deps: AppDeps): Hono {
           <p role="status">
             {job}: {result}
           </p>
+        )}
+        <p>
+          Places calls this month: {monthUsed} / {monthlyCap}
+        </p>
+        {monthUsed >= monthlyCap * 0.8 && (
+          <p role="alert">Places usage is nearing the monthly cap; discovery and refresh stop once it is reached.</p>
         )}
         <form method="post" action="/admin/jobs/refreshLocations/run">
           <button type="submit">Run location refresh now</button>

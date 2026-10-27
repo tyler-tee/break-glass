@@ -2,18 +2,14 @@ import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import { openDb } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
-import { loadEnv } from './env.js';
+import { loadDotEnvFiles, loadEnv } from './env.js';
 import { refreshLocations } from './jobs/refreshLocations.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { makeExtractor } from './services/llm/extract.js';
 import { createProvider } from './services/llm/index.js';
-import { CallBudget } from './services/places/client.js';
+import { newPlacesBudget } from './services/places/budget.js';
 
-try {
-  process.loadEnvFile('.env');
-} catch {
-  // .env is optional
-}
+loadDotEnvFiles();
 
 const env = loadEnv(process.env);
 const db = openDb(env.DATABASE_PATH);
@@ -33,7 +29,7 @@ const scheduler = startScheduler({
     refreshLocations: () =>
       places
         ? refreshLocations(db, {
-            places: { ...places, budget: new CallBudget(env.PLACES_CALL_CAP) },
+            places: { ...places, budget: newPlacesBudget(db, env) },
             env,
             now: () => new Date(),
             log: console,

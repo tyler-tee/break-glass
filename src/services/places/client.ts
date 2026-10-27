@@ -1,5 +1,6 @@
 import { normalizeHours } from '../../domain/hours.js';
 import type { LatLng, TrackedFields } from '../../domain/types.js';
+import { BudgetExhausted, CallBudget } from './budget.js';
 import type {
   PlaceDetails,
   PlaceSummary,
@@ -13,11 +14,11 @@ const METERS_PER_MILE = 1609.344;
 const MAX_RADIUS_METERS = 50000;
 
 const SEARCH_MASK =
-  'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.businessStatus';
+  'places.id,places.displayName,places.formattedAddress,places.location,places.businessStatus';
 const DETAILS_MASK =
   'id,displayName,formattedAddress,nationalPhoneNumber,websiteUri,location,rating,userRatingCount,businessStatus,regularOpeningHours';
 
-export class BudgetExhausted extends Error {}
+export { BudgetExhausted, CallBudget };
 
 export class PlacesError extends Error {
   constructor(
@@ -26,21 +27,6 @@ export class PlacesError extends Error {
   ) {
     super(`Places API error ${status}: ${body}`);
     this.name = 'PlacesError';
-  }
-}
-
-export class CallBudget {
-  used = 0;
-
-  constructor(readonly cap: number) {}
-
-  take(): void {
-    if (this.used >= this.cap) throw new BudgetExhausted(`Places call budget of ${this.cap} exhausted`);
-    this.used++;
-  }
-
-  remaining(): number {
-    return this.cap - this.used;
   }
 }
 
@@ -94,7 +80,8 @@ export async function textSearch(
     },
     deps,
   );
-  return (data.places ?? []).map(summarize);
+  // The search mask omits rating fields (they bill at the Enterprise SKU); ratings come from details.
+  return (data.places ?? []).map((p) => ({ ...summarize(p), rating: null, ratingCount: null }));
 }
 
 export async function placeDetails(placeId: string, deps: PlacesDeps): Promise<PlaceDetails> {

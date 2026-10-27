@@ -3,7 +3,8 @@ import type { AppDeps } from '../../app.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
 import { placesErrorPage } from '../../web/placesErrorPage.js';
-import { CallBudget, PlacesError } from '../../services/places/client.js';
+import { newPlacesBudget } from '../../services/places/budget.js';
+import { PlacesError } from '../../services/places/client.js';
 import { NoHomeLocation, runDiscovery } from '../locations/discovery.js';
 import { CategoryError, createCategory, deleteCategory, getCategory, listCategories, updateCategory } from './repo.js';
 
@@ -157,7 +158,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
     if (!deps.places) return listPage(c, { error: 'Set GOOGLE_PLACES_API_KEY to enable discovery', status: 400 });
     try {
       const report = await runDiscovery(db, id, {
-        places: { ...deps.places, budget: new CallBudget(deps.env.PLACES_CALL_CAP) },
+        places: { ...deps.places, budget: newPlacesBudget(db, deps.env, deps.now) },
         now: deps.now ?? (() => new Date()),
         log: console,
         ...(deps.extract ? { extract: deps.extract } : {}),
@@ -168,7 +169,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
         skipped: String(report.skipped),
         calls: String(report.callsUsed),
       });
-      if (report.stoppedEarly) q.set('stopped', '1');
+      if (report.stoppedEarly) q.set('stopped', report.stopReason ?? 'run');
       return c.redirect(`/admin/candidates?${q}`, 302);
     } catch (e) {
       if (e instanceof NoHomeLocation) {

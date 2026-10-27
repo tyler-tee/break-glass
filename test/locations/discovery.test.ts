@@ -12,7 +12,7 @@ import { createCategory } from '../../src/features/categories/repo.js';
 import { NoHomeLocation, runDiscovery } from '../../src/features/locations/discovery.js';
 import { approveLocation } from '../../src/features/locations/service.js';
 import type { Extractor } from '../../src/services/llm/extract.js';
-import { CallBudget } from '../../src/services/places/client.js';
+import { CallBudget, dbLedger } from '../../src/services/places/budget.js';
 import { adminLogin } from '../helpers/adminLogin.js';
 import { recordingFetch } from '../helpers/recordingFetch.js';
 import { createTestDb } from '../helpers/testDb.js';
@@ -131,6 +131,19 @@ describe('runDiscovery', () => {
     expect(rows().map((l) => l.name)).toEqual(['Near Dental Group']);
   });
 
+  it('discovery stops when the monthly cap is reached', async () => {
+    const ledger = dbLedger(db);
+    ledger.add(ledger.month(now), 2, now);
+    const warns: string[] = [];
+    const log = { ...silent, warn: (m: unknown) => void warns.push(String(m)) };
+    const budget = new CallBudget(10, { ledger, monthlyCap: 3, now: () => now });
+    const d = discoveryDeps();
+    const report = await runDiscovery(db, categoryId, { ...d, places: { ...d.places, budget }, log });
+    expect(report).toMatchObject({ searched: 1, found: 2, inserted: 0, stoppedEarly: true, stopReason: 'month', callsUsed: 1 });
+    expect(warns.join(' ')).toContain('month');
+    expect(ledger.get(ledger.month(now))).toBe(3);
+  });
+
   it('details failure falls back to the summary row', async () => {
     const gone = createCategory(db, { name: 'Gone Dentist', searchTerms: ['gone dentist'] }).id;
     const warns: string[] = [];
@@ -140,7 +153,7 @@ describe('runDiscovery', () => {
     const found = db.select().from(locations).where(eq(locations.categoryId, gone)).all();
     expect(found.map((l) => l.status)).toEqual(['candidate', 'candidate']);
     const g = found.find((l) => l.placeId === 'ChIJgone')!;
-    expect(g).toMatchObject({ name: 'Gone Dental', phone: null, hours: null, rating: 4 });
+    expect(g).toMatchObject({ name: 'Gone Dental', phone: null, hours: null, rating: null });
     expect(found.find((l) => l.placeId === 'ChIJnear')!.phone).toBe('(801) 555-0100');
     expect(warns).toHaveLength(1);
     expect(warns[0]).toContain('ChIJgone');
