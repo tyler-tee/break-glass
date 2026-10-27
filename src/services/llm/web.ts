@@ -21,10 +21,54 @@ function decodeEntities(s: string): string {
   });
 }
 
+const RAW_TEXT_BLOCKS = new Set(['script', 'style']);
+
+function blockEnd(html: string, from: number, name: string, closer: RegExp): number {
+  if (RAW_TEXT_BLOCKS.has(name)) {
+    const close = new RegExp(`</${name}\\s*>`, 'gi');
+    close.lastIndex = from;
+    const m = close.exec(html);
+    if (m) return m.index + m[0].length;
+  } else {
+    const tag = new RegExp(`<(/?)${name}\\b[^>]*>`, 'gi');
+    tag.lastIndex = from;
+    let depth = 1;
+    for (let m = tag.exec(html); m; m = tag.exec(html)) {
+      if (m[1]) depth--;
+      else if (!m[0].endsWith('/>')) depth++;
+      if (depth === 0) return m.index + m[0].length;
+    }
+  }
+  // Unclosed: drop only up to the next closing tag of any block kind, never to end-of-document.
+  closer.lastIndex = from;
+  const any = closer.exec(html);
+  return any ? any.index + any[0].length : -1;
+}
+
+/** Removes comments and the given blocks; an unclosed block loses only its own tag or the span up to the next block close. */
+export function stripBlocks(html: string, names: string[]): string {
+  const alt = names.join('|');
+  const open = new RegExp(`<(${alt})\\b[^>]*>`, 'gi');
+  const closer = new RegExp(`</(?:${alt})\\s*>`, 'gi');
+  const src = html.replace(/<!--[\s\S]*?-->/g, '').replace(/<!--/g, '');
+  let out = '';
+  let pos = 0;
+  for (let m = open.exec(src); m; m = open.exec(src)) {
+    out += src.slice(pos, m.index);
+    const tagEnd = m.index + m[0].length;
+    const end = m[0].endsWith('/>') ? tagEnd : blockEnd(src, tagEnd, (m[1] as string).toLowerCase(), closer);
+    pos = end === -1 ? tagEnd : end;
+    open.lastIndex = pos;
+  }
+  return out + src.slice(pos);
+}
+
+const TEXT_BLOCKS = ['script', 'style', 'noscript', 'template', 'svg', 'head'];
+// Same as TEXT_BLOCKS minus <head>, so the title survives for fetchPage.
+const BULK_BLOCKS = ['script', 'style', 'noscript', 'template', 'svg'];
+
 export function htmlToText(html: string): string {
-  const stripped = html
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1\s*>/gi, '')
+  const stripped = stripBlocks(html, TEXT_BLOCKS)
     .replace(/<\/(?:td|th)\s*>/gi, ' ')
     .replace(
       /<br\s*\/?>|<hr\s*\/?>|<\/(?:p|div|li|h[1-6]|tr|dt|dd|section|article|header|footer|nav|ul|ol|table|blockquote|pre|option)\s*>/gi,
@@ -180,7 +224,8 @@ async function fetchHtml(startUrl: string, ctx: FetchCtx): Promise<string | null
     if (!type || !/^\s*(text\/html|application\/xhtml\+xml)\b/i.test(type)) return null;
     const length = Number(res.headers.get('content-length'));
     if (Number.isFinite(length) && length > MAX_BODY_CHARS) return null;
-    return (await readCapped(res, MAX_BODY_CHARS)).slice(0, MAX_HTML_CHARS);
+    // Strip bulky inline CSS/JS/SVG before capping so the article is not pushed past the cap.
+    return stripBlocks(await readCapped(res, MAX_BODY_CHARS), BULK_BLOCKS).slice(0, MAX_HTML_CHARS);
   }
   ctx.log?.warn(`too many redirects for ${startUrl}`);
   return null;

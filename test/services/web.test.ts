@@ -17,6 +17,33 @@ describe('htmlToText', () => {
     );
     expect(text).toBe('Tom & Jerry <3 "hi" it\'s ok AB\nNext');
   });
+
+  it('style with attributes and uppercase is stripped', () => {
+    const text = htmlToText(
+      '<STYLE type="text/css" id="x">.a{color:red}</STYLE><Script async src="a.js">var y=2;</Script>' +
+        '<SVG viewBox="0 0 1 1"><path d="M0 0"/></SVG><p>Body</p>',
+    );
+    expect(text).toBe('Body');
+  });
+
+  it('removes head contents and unterminated comments do not hide text', () => {
+    expect(htmlToText('<html><head><title>T</title><style>x{}</style></head><body><p>Body</p></body></html>')).toBe('Body');
+    expect(htmlToText('<p>One</p><!-- dangling <p>Two</p>')).toContain('One');
+  });
+
+  it('unclosed template does not swallow following content', () => {
+    const text = htmlToText('<template><p>Keep me</p><p>And me</p>');
+    expect(text).toContain('Keep me');
+    expect(text).toContain('And me');
+  });
+
+  it('unclosed style stops at the next closing block tag', () => {
+    expect(htmlToText('<style>a{}<p>Gone</p></noscript><p>Kept</p>')).toBe('Kept');
+  });
+
+  it('a block never swallows content past its own close', () => {
+    expect(htmlToText('<p>A</p><noscript>x</noscript><p>B</p><template>y</template><p>C</p>')).toBe('A\nB\nC');
+  });
 });
 
 describe('htmlToText block separation', () => {
@@ -173,6 +200,20 @@ describe('fetchWebsiteText', () => {
 });
 
 describe('fetchPage', () => {
+  it('fetchPage-style document keeps body text after head styles', async () => {
+    const css = '.cmp-x{max-width:300px;margin:0 auto;}'.repeat(15_000);
+    const html =
+      `<!DOCTYPE html><html><head><title>Choking: First aid</title><style id="a">${css}</style>` +
+      `<style id="b">${css}</style></head><body><h1>Choking</h1><p>Give five abdominal thrusts.</p></body></html>`;
+    expect(html.length).toBeGreaterThan(1_000_000);
+    const fetch = (async () =>
+      new Response(html, { status: 200, headers: { 'content-type': 'text/html' } })) as unknown as typeof globalThis.fetch;
+    const page = await fetchPage('https://clinic.example/choking', { fetch, lookup: publicLookup });
+    expect(page?.title).toBe('Choking: First aid');
+    expect(page?.text).toContain('abdominal thrusts');
+    expect(page?.text).not.toContain('max-width');
+  });
+
   it('fetchPage honors allowHost on the initial URL', async () => {
     const fetch = fakeSiteFetch(ROOT);
     const warn = vi.fn();
