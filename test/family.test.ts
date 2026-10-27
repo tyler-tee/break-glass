@@ -81,4 +81,31 @@ describe('family pages', () => {
     expect(html.indexOf('Shut Dental')).toBeGreaterThan(html.indexOf('Far Dental'));
     expect(html).toContain('Reported closed');
   });
+
+  it('category page lists its visible dentists and unknown slug is 404', async () => {
+    const res = await app.request('/c/dentist');
+    const html = await res.text();
+    expect(res.status).toBe(200);
+    expect(html).toContain('Near Dental');
+    expect(html).toContain('Far Dental');
+    expect(html).not.toContain('Candidate Dental');
+    expect(html).not.toContain('Rejected Dental');
+    expect((await app.request('/c/nope')).status).toBe(404);
+  });
+
+  it('home page is a full document', async () => {
+    const res = await app.request('/');
+    const html = await res.text();
+    expect(res.status).toBe(200);
+    expect(html.toLowerCase().startsWith('<!doctype html>')).toBe(true);
+    expect(html).toContain('name="viewport"');
+    expect(html).toContain('href="/emergency"');
+  });
+
+  it('location names are HTML-escaped', async () => {
+    insertDentist({ name: '<script>alert(1)</script> Dental', distanceMi: 0.5 });
+    const html = await (await app.request('/search?q=dental')).text();
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).not.toContain('<script>alert');
+  });
 });
