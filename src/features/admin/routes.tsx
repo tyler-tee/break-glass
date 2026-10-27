@@ -9,6 +9,7 @@ import { installState } from './install.js';
 import { listLocations } from '../locations/repo.js';
 import { getPublished, listProtocols } from '../protocols/repo.js';
 import { settingsRoutes } from './settingsRoutes.js';
+import { setupRoutes } from './setup/routes.js';
 import type { JobName, RunResult } from '../../jobs/scheduler.js';
 import { newPlacesBudget } from '../../services/places/budget.js';
 import { SESSION_COOKIE, createSession, requireAdmin, requireSameOrigin, verifyPassword } from './auth.js';
@@ -159,6 +160,8 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
     return c.redirect(`/admin?job=${name}&result=${result}`, 302);
   });
 
+  // Mounted after requireAdmin/requireSameOrigin, so every wizard GET and POST is authenticated and origin-checked.
+  app.route('/setup', setupRoutes(deps));
   app.route('/settings', settingsRoutes(deps));
   app.route('/categories', categoriesRoutes(deps));
   app.route('/locations', locationsAdminRoutes(deps));

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Child } from 'hono/jsx';
 import type { AppDeps } from '../../app.js';
 import { page } from '../../web/Layout.js';
 import { budgetExhaustedPage, placesErrorPage } from '../../web/placesErrorPage.js';
@@ -19,7 +20,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
   const { db } = deps;
   const app = new Hono();
 
-  const listPage = (c: Parameters<typeof page>[0], opts: { error?: string; status?: 200 | 400 | 409 } = {}) =>
+  const listPage = (c: Parameters<typeof page>[0], opts: { error?: Child; status?: 200 | 400 | 409 } = {}) =>
     page(
       c,
       'Categories',
@@ -156,7 +157,17 @@ export function categoriesRoutes(deps: AppDeps): Hono {
     const category = getCategory(db, id);
     if (!category) return c.notFound();
     const places = placesOf(deps);
-    if (!places) return listPage(c, { error: 'Set GOOGLE_PLACES_API_KEY to enable discovery', status: 400 });
+    if (!places) {
+      return listPage(c, {
+        error: (
+          <>
+            Add a Google Places key in Setup → Services to enable discovery.{' '}
+            <a href="/admin/setup/services">Add a key</a>
+          </>
+        ),
+        status: 400,
+      });
+    }
     const extract = extractOf(deps);
     try {
       const report = await runDiscovery(db, id, {

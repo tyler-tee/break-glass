@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Child } from 'hono/jsx';
 import type { ResolvedAppDeps } from '../../app.js';
 import { BudgetExhausted, newPlacesBudget } from '../../services/places/budget.js';
 import { PlacesError, geocode } from '../../services/places/client.js';
@@ -23,7 +24,7 @@ export function settingsRoutes(deps: ResolvedAppDeps): Hono {
   const formPage = (
     c: Parameters<typeof page>[0],
     s: Settings,
-    opts: { saved?: boolean; error?: string; pwError?: PwError; status?: 200 | 400 } = {},
+    opts: { saved?: boolean; error?: Child; pwError?: PwError; status?: 200 | 400 } = {},
   ) =>
     page(
       c,
@@ -183,7 +184,15 @@ export function settingsRoutes(deps: ResolvedAppDeps): Hono {
     const address = str(body['address']).trim();
     const places = placesOf(deps);
     if (!places) {
-      return formPage(c, getSettings(deps.db), { error: 'Set GOOGLE_PLACES_API_KEY to enable geocoding', status: 400 });
+      return formPage(c, getSettings(deps.db), {
+        error: (
+          <>
+            Add a Google Places key in Setup → Services to enable address lookup.{' '}
+            <a href="/admin/setup/services">Add a key</a>
+          </>
+        ),
+        status: 400,
+      });
     }
     if (address === '') return formPage(c, getSettings(deps.db), { error: 'Address is required', status: 400 });
     let hit: Awaited<ReturnType<typeof geocode>>;

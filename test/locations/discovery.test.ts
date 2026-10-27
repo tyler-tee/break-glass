@@ -186,7 +186,9 @@ describe('discovery routes', () => {
     const { app, cookie } = await makeApp(false);
     const res = await post(app, cookie, `/admin/categories/${categoryId}/discover`);
     expect(res.status).toBe(400);
-    expect(await res.text()).toContain('GOOGLE_PLACES_API_KEY');
+    const html = await res.text();
+    expect(html).toContain('Add a Google Places key in Setup → Services to enable discovery.');
+    expect(html).toContain('href="/admin/setup/services"');
     expect(rows()).toHaveLength(0);
   });
 
@@ -264,7 +266,9 @@ describe('discovery routes', () => {
     const { app, cookie } = await makeApp(false);
     const res = await post(app, cookie, '/admin/settings/geocode', new URLSearchParams({ address: 'x' }).toString());
     expect(res.status).toBe(400);
-    expect(await res.text()).toContain('GOOGLE_PLACES_API_KEY');
+    const html = await res.text();
+    expect(html).toContain('Add a Google Places key in Setup → Services to enable address lookup.');
+    expect(html).toContain('href="/admin/setup/services"');
   });
 
   const forbiddenFetch = (async () =>

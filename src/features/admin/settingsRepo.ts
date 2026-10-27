@@ -16,6 +16,8 @@ export type SettingsPatch = Partial<
     | 'homeTz'
     | 'locationRefreshCron'
     | 'protocolRefreshCron'
+    | 'householdName'
+    | 'emergencyNumber'
   >
 >;
 

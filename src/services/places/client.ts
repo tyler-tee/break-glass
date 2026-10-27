@@ -9,7 +9,8 @@ import type {
   RawSearchResponse,
 } from './types.js';
 
-const BASE_URL = 'https://places.googleapis.com/v1';
+export const PLACES_BASE_URL = 'https://places.googleapis.com/v1';
+const BASE_URL = PLACES_BASE_URL;
 const METERS_PER_MILE = 1609.344;
 const MAX_RADIUS_METERS = 50000;
 
@@ -34,7 +35,8 @@ const REQUEST_TIMEOUT_MS = 15_000;
 
 export type PlacesDeps = { fetch: typeof fetch; apiKey: string; budget: CallBudget };
 
-async function request<T>(url: string, init: RequestInit, deps: PlacesDeps): Promise<T> {
+/** One budgeted Places request; exported for the key probe, which needs its own minimal field mask. */
+export async function placesRequest<T>(url: string, init: RequestInit, deps: PlacesDeps): Promise<T> {
   deps.budget.take();
   let res: Response;
   try {
@@ -78,7 +80,7 @@ export async function textSearch(
       },
     }),
   };
-  const data = await request<RawSearchResponse>(
+  const data = await placesRequest<RawSearchResponse>(
     `${BASE_URL}/places:searchText`,
     {
       method: 'POST',
@@ -96,7 +98,7 @@ export async function textSearch(
 }
 
 export async function placeDetails(placeId: string, deps: PlacesDeps): Promise<PlaceDetails> {
-  const data = await request<RawDetailsResponse>(
+  const data = await placesRequest<RawDetailsResponse>(
     `${BASE_URL}/places/${encodeURIComponent(placeId)}`,
     {
       method: 'GET',
