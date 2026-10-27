@@ -30,11 +30,22 @@ export class PlacesError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 export type PlacesDeps = { fetch: typeof fetch; apiKey: string; budget: CallBudget };
 
 async function request<T>(url: string, init: RequestInit, deps: PlacesDeps): Promise<T> {
   deps.budget.take();
-  const res = await deps.fetch(url, init);
+  let res: Response;
+  try {
+    res = await deps.fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  } catch (e) {
+    // Timeouts (AbortError/TimeoutError) and network failures (TypeError) surface as one error type.
+    if (e instanceof Error && (e instanceof TypeError || e.name === 'AbortError' || e.name === 'TimeoutError')) {
+      throw new PlacesError(0, e.message);
+    }
+    throw e;
+  }
   if (!res.ok) throw new PlacesError(res.status, await res.text());
   return (await res.json()) as T;
 }

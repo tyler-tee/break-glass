@@ -302,6 +302,30 @@ describe('discovery routes', () => {
     expect(html).toContain('API key invalid');
   });
 
+  it('discover route returns 502 on network failure', async () => {
+    const failing = (async () => {
+      throw new TypeError('fetch failed');
+    }) as unknown as typeof fetch;
+    const app = createApp({ db, env: await env(), now: () => now, places: { fetch: failing, apiKey: 'k' } });
+    const cookie = await adminLogin(app, 'correct horse');
+    const res = await post(app, cookie, `/admin/categories/${categoryId}/discover`);
+    expect(res.status).toBe(502);
+    expect(await res.text()).toContain('Places API error 0: fetch failed');
+  });
+
+  it('places requests carry a timeout signal', async () => {
+    const seen: (AbortSignal | null | undefined)[] = [];
+    const spy = (async (_url: unknown, init?: RequestInit) => {
+      seen.push(init?.signal);
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+    const app = createApp({ db, env: await env(), now: () => now, places: { fetch: spy, apiKey: 'k' } });
+    const cookie = await adminLogin(app, 'correct horse');
+    await post(app, cookie, `/admin/categories/${categoryId}/discover`);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((s) => s instanceof AbortSignal)).toBe(true);
+  });
+
   it('geocode route maps PlacesError to 502', async () => {
     const { app, cookie } = await makeFailingApp();
     const res = await post(app, cookie, '/admin/settings/geocode', new URLSearchParams({ address: 'x' }).toString());
