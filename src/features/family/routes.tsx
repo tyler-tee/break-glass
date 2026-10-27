@@ -4,7 +4,7 @@ import type { AppDeps } from '../../app.js';
 import { requestClock } from '../clock.js';
 import { LocationCard } from '../../web/components/LocationCard.js';
 import { WarningBadge } from '../../web/components/WarningBadge.js';
-import { renderMarkdown } from '../../web/format.js';
+import { renderMarkdown, safeHref } from '../../web/format.js';
 import { page } from '../../web/Layout.js';
 import { getCategoryBySlug, listCategories } from '../categories/repo.js';
 import { getPublished, getPublishedBySlug } from '../protocols/repo.js';
@@ -125,7 +125,7 @@ export function familyRoutes(deps: AppDeps): Hono {
     const found = getPublishedBySlug(db, c.req.param('slug'));
     if (!found) return page(c, 'Not found', <p>Protocol not found</p>, 404);
     const { protocol, version, sources } = found;
-    const reviewed = version.reviewedAt ? ` · reviewed ${version.reviewedAt.toISOString().slice(0, 10)}` : '';
+    const reviewed = version.reviewedAt ? ` - reviewed ${version.reviewedAt.toISOString().slice(0, 10)}` : '';
     return page(
       c,
       protocol.title,
@@ -140,7 +140,7 @@ export function familyRoutes(deps: AppDeps): Hono {
           <ul class="sources">
             {sources.map((s) => (
               <li>
-                <a href={s.url}>{s.title ?? s.url}</a>
+                {safeHref(s.url) ? <a href={safeHref(s.url)!}>{s.title ?? s.url}</a> : <span>{s.title ?? s.url}</span>}
                 {s.fetchedAt ? <span class="muted"> (fetched {s.fetchedAt.toISOString().slice(0, 10)})</span> : null}
               </li>
             ))}

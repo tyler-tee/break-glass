@@ -4,7 +4,7 @@ import type { AppDeps } from '../../app.js';
 import { slugify } from '../../domain/slug.js';
 import { LlmRefusalError, LlmValidationError } from '../../services/llm/provider.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
-import { renderMarkdown } from '../../web/format.js';
+import { renderMarkdown, safeHref } from '../../web/format.js';
 import { page } from '../../web/Layout.js';
 import {
   createProtocol,
@@ -170,7 +170,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
                 <li>
                   {s.title ?? s.url}
                   <br />
-                  <a href={s.url}>{s.url}</a>
+                  {safeHref(s.url) ? <a href={safeHref(s.url)!}>{s.url}</a> : <span>{s.url}</span>}
                   <br />
                   <span class="muted">
                     {(s.contentHash ?? '').slice(0, 12)} {fmt(s.fetchedAt)}

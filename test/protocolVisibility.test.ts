@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { Db } from '../src/db/client.js';
-import { protocols } from '../src/db/schema.js';
+import { protocolSources, protocolVersions, protocols } from '../src/db/schema.js';
 import type { ProtocolStatus } from '../src/domain/types.js';
 import { loadEnv } from '../src/env.js';
 import { createProtocol, insertSources, insertVersion } from '../src/features/protocols/repo.js';
@@ -78,7 +78,7 @@ describe('protocol visibility', () => {
     expect(html).toContain('Sources</h2>');
     expect(html).toContain(`href="${RC}"`);
     expect(html).toContain(`href="${NHS}"`);
-    expect(html).toContain('Published v2');
+    expect(html).toContain('Published v2 - reviewed 2026-02-01');
   });
 
   it('superseded slug shows the new published body', async () => {
@@ -131,6 +131,15 @@ describe('protocol visibility', () => {
     const missing = await app.request('/api/protocols/nope');
     expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({ error: 'not found' });
+  });
+
+  it('javascript: source URL is not rendered as a link', async () => {
+    const p = seedPublished();
+    const v = db.select().from(protocolVersions).where(eq(protocolVersions.protocolId, p.id)).all().find((x) => x.status === 'published')!;
+    db.insert(protocolSources).values({ protocolVersionId: v.id, url: 'javascript:alert(1)', title: null, fetchedAt: NOW, contentHash: 'c'.repeat(64) }).run();
+    const html = await (await app.request('/emergency/choking-adult')).text();
+    expect(html).not.toContain('href="javascript:');
+    expect(html).toContain('javascript:alert(1)');
   });
 
   it('home page emergency link resolves', async () => {
