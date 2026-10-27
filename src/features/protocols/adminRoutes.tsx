@@ -4,6 +4,7 @@ import type { AppDeps } from '../../app.js';
 import { slugify } from '../../domain/slug.js';
 import { LlmRefusalError, LlmValidationError } from '../../services/llm/provider.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
+import { WarningBadge } from '../../web/components/WarningBadge.js';
 import { renderMarkdown, safeHref } from '../../web/format.js';
 import { page } from '../../web/Layout.js';
 import {
@@ -110,7 +111,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         </table>
         <h2>Generate draft</h2>
         {allowlist.length > 0 && <p class="muted">Allowed source hosts: {allowlist.join(', ')}</p>}
-        <form method="post" action={`/admin/protocols/${id}/draft`}>
+        <form id="draft" method="post" action={`/admin/protocols/${id}/draft`}>
           <p>
             <label>
               Source URLs (one per line)
@@ -284,10 +285,18 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
             </tr>
           </thead>
           <tbody>
-            {listProtocols(db).map((p) => (
+            {[...listProtocols(db)]
+              .sort((a, b) => Number(b.needsRereview) - Number(a.needsRereview))
+              .map((p) => (
               <tr>
                 <td>
                   <a href={`/admin/protocols/${p.id}`}>{p.title}</a>
+                  {p.needsRereview && (
+                    <>
+                      <WarningBadge kind="warn" summary={p.rereviewReason ?? 'Sources changed; under re-review'} />
+                      <a href={`/admin/protocols/${p.id}#draft`}>Start new draft from these sources</a>
+                    </>
+                  )}
                 </td>
                 <td>{p.slug}</td>
                 <td>{p.publishedVersion === null ? 'none' : `v${p.publishedVersion}`}</td>

@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { openDb } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 import { loadDotEnvFiles, loadEnv } from './env.js';
+import { recheckProtocols } from './jobs/recheckProtocols.js';
 import { refreshLocations } from './jobs/refreshLocations.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { makeExtractor } from './services/llm/extract.js';
@@ -37,10 +38,8 @@ const scheduler = startScheduler({
           })
         : (console.info('refreshLocations skipped: GOOGLE_PLACES_API_KEY not set'),
           Promise.resolve()),
-    // Task 24 replaces this stub.
-    recheckProtocols: async () => {
-      console.info('recheckProtocols: not implemented yet');
-    },
+    recheckProtocols: () =>
+      recheckProtocols(db, { fetch: globalThis.fetch, now: () => new Date(), log: console }),
   },
   log: console,
 });

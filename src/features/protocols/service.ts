@@ -47,6 +47,10 @@ export function isAllowedSource(url: URL, allowlist: string[]): boolean {
   return allowlist.some((entry) => host === entry || host.endsWith(`.${entry}`));
 }
 
+export function hashSourceText(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
 export async function generateDraft(
   db: Db,
   protocolId: number,
@@ -110,7 +114,7 @@ export async function generateDraft(
         url: p.url,
         title: p.title,
         fetchedAt: now,
-        contentHash: createHash('sha256').update(p.text).digest('hex'),
+        contentHash: hashSourceText(p.text),
       })),
     );
     return version;
