@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import type { Db, DbOrTx } from '../../db/client.js';
 import { categories, locationChanges, locationSnapshots, locations } from '../../db/schema.js';
 import type { FieldChange, TrackedFields } from '../../domain/types.js';
@@ -80,4 +80,34 @@ export function resolveOpenChanges(db: DbOrTx, locationId: number, resolvedAt: D
     .set({ resolvedAt })
     .where(and(eq(locationChanges.locationId, locationId), isNull(locationChanges.resolvedAt)))
     .run().changes;
+}
+
+export function listRefreshable(db: Db): Location[] {
+  return db
+    .select()
+    .from(locations)
+    .where(and(inArray(locations.status, [...VISIBLE]), isNotNull(locations.placeId)))
+    .orderBy(asc(locations.id))
+    .all();
+}
+
+export function latestSnapshot(
+  db: DbOrTx,
+  locationId: number,
+): { payload: TrackedFields; hash: string; fetchedAt: Date } | null {
+  const row = db
+    .select()
+    .from(locationSnapshots)
+    .where(eq(locationSnapshots.locationId, locationId))
+    .orderBy(desc(locationSnapshots.fetchedAt), desc(locationSnapshots.id))
+    .limit(1)
+    .get();
+  return row ? { payload: row.payload, hash: row.hash, fetchedAt: row.fetchedAt } : null;
+}
+
+export function insertChanges(db: DbOrTx, locationId: number, detectedAt: Date, changes: FieldChange[]): void {
+  if (changes.length === 0) return;
+  db.insert(locationChanges)
+    .values(changes.map((c) => ({ locationId, detectedAt, field: c.field, oldValue: c.oldValue, newValue: c.newValue })))
+    .run();
 }

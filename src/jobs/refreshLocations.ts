@@ -1,0 +1,132 @@
+import type { Db } from '../db/client.js';
+import { decideTransition, diffTracked, hashTracked, normalizeTracked } from '../domain/snapshot.js';
+import type { Logger, TrackedFields } from '../domain/types.js';
+import type { Env } from '../env.js';
+import {
+  insertChanges,
+  insertSnapshot,
+  latestSnapshot,
+  listRefreshable,
+  updateLocationRow,
+} from '../features/locations/repo.js';
+import {
+  BudgetExhausted,
+  PlacesError,
+  detailsToTracked,
+  placeDetails,
+  type PlacesDeps,
+} from '../services/places/client.js';
+
+export type RefreshReport = {
+  checked: number;
+  warned: number;
+  unchanged: number;
+  failed: number;
+  baselined: number;
+  callsUsed: number;
+  stoppedEarly: boolean;
+};
+
+export async function refreshLocations(
+  db: Db,
+  deps: {
+    places: PlacesDeps;
+    env: Pick<Env, 'REFRESH_FAILURE_THRESHOLD' | 'RATING_WARN_DELTA'>;
+    now: () => Date;
+    log: Logger;
+  },
+): Promise<RefreshReport> {
+  const { places, env, now, log } = deps;
+  const report: RefreshReport = {
+    checked: 0,
+    warned: 0,
+    unchanged: 0,
+    failed: 0,
+    baselined: 0,
+    callsUsed: 0,
+    stoppedEarly: false,
+  };
+  const finish = (): RefreshReport => ({ ...report, callsUsed: places.budget.used });
+
+  for (const row of listRefreshable(db)) {
+    let counted = false;
+    try {
+      let next: TrackedFields | null = null;
+      try {
+        const details = await placeDetails(row.placeId!, places);
+        // LLM note fields are carried forward from the row until extraction exists.
+        next = normalizeTracked({
+          ...detailsToTracked(details),
+          afterHoursNotes: row.afterHoursNotes,
+          walkIns: row.walkIns,
+          insuranceNotes: row.insuranceNotes,
+        });
+      } catch (e) {
+        if (!(e instanceof PlacesError || e instanceof TypeError)) throw e;
+        log.warn(`Place details failed for ${row.placeId}: ${e.message}`);
+      }
+      report.checked++;
+      counted = true;
+
+      const at = now();
+      const base = {
+        current: row.status,
+        failures: row.consecutiveFetchFailures,
+        failureThreshold: env.REFRESH_FAILURE_THRESHOLD,
+        ratingWarnDelta: env.RATING_WARN_DELTA,
+      };
+
+      if (next === null) {
+        const decision = decideTransition({ ...base, fetchOk: false, changes: [] });
+        db.transaction((tx) => {
+          insertChanges(tx, row.id, at, decision.changeRows);
+          updateLocationRow(tx, row.id, {
+            status: decision.status,
+            consecutiveFetchFailures: decision.failures,
+            updatedAt: at,
+          });
+        });
+        report.failed++;
+        if (decision.status === 'warn' && decision.changeRows.length > 0) report.warned++;
+        continue;
+      }
+
+      const snapshot = next;
+      const prevSnapshot = latestSnapshot(db, row.id);
+      if (prevSnapshot === null) {
+        db.transaction((tx) => {
+          insertSnapshot(tx, { locationId: row.id, fetchedAt: at, payload: snapshot, hash: hashTracked(snapshot) });
+          updateLocationRow(tx, row.id, { lastVerifiedAt: at, consecutiveFetchFailures: 0, updatedAt: at });
+        });
+        report.baselined++;
+        continue;
+      }
+
+      const changes = diffTracked(normalizeTracked(prevSnapshot.payload), snapshot);
+      const decision = decideTransition({ ...base, fetchOk: true, changes });
+      db.transaction((tx) => {
+        if (decision.writeSnapshot) {
+          insertSnapshot(tx, { locationId: row.id, fetchedAt: at, payload: snapshot, hash: hashTracked(snapshot) });
+        }
+        insertChanges(tx, row.id, at, decision.changeRows);
+        updateLocationRow(tx, row.id, {
+          status: decision.status,
+          consecutiveFetchFailures: decision.failures,
+          updatedAt: at,
+          ...(decision.touchVerified && { lastVerifiedAt: at }),
+        });
+      });
+      if (decision.status === 'warn' && decision.changeRows.length > 0) report.warned++;
+      else if (decision.touchVerified && decision.changeRows.length === 0) report.unchanged++;
+    } catch (e) {
+      if (e instanceof BudgetExhausted) {
+        report.stoppedEarly = true;
+        return finish();
+      }
+      log.error(`Refresh failed for location ${row.id}: ${e instanceof Error ? e.message : String(e)}`);
+      if (!counted) report.checked++;
+      report.failed++;
+    }
+  }
+  return finish();
+}
