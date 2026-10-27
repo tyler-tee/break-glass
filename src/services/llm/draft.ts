@@ -66,7 +66,7 @@ export async function draftProtocol(
     system,
     prompt,
     schema: DraftSchema,
-    maxTokens: 4096,
+    maxTokens: 16000,
     effort: 'high',
   });
   assertSopHeadings(bodyMd);

@@ -51,6 +51,13 @@ const tracked = (over: Partial<TrackedFields> = {}): TrackedFields => ({
 });
 
 describe('makeExtractor', () => {
+  it('asks the LLM for 4000 max tokens', async () => {
+    const inner = fixtureProvider(LLM_DIR);
+    const spy = vi.fn(inner.generateJson.bind(inner));
+    await extractor({ llm: { generateJson: spy } as LlmProvider })('https://near-dental.example/');
+    expect(spy.mock.calls[0]![0].maxTokens).toBe(4000);
+  });
+
   it('populates notes from fixture pages', async () => {
     const e = await extractor()('https://near-dental.example/');
     expect(e?.afterHoursNotes.value).toContain('on-call');

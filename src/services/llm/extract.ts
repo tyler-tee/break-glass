@@ -61,7 +61,7 @@ export function makeExtractor(deps: {
         system,
         prompt,
         schema: ExtractionSchema,
-        maxTokens: 1024,
+        maxTokens: 4000,
         effort: 'low',
       });
       log.info(

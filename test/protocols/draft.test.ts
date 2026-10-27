@@ -50,6 +50,14 @@ const counts = () => ({
 });
 
 describe('generateDraft', () => {
+  it('asks the LLM for 16000 max tokens', async () => {
+    const inner = fixtureProvider(LLM_DIR);
+    const spy = vi.fn(inner.generateJson.bind(inner));
+    const llm = { generateJson: spy } as LlmProvider;
+    await generateDraft(db, choking().id, [RC, NHS], deps({ llm }));
+    expect(spy.mock.calls[0]![0].maxTokens).toBe(16000);
+  });
+
   it('stores sources with hashes and a draft version 1', async () => {
     const p = choking();
     const v = await generateDraft(db, p.id, [RC, NHS], deps());
