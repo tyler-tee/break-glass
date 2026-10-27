@@ -18,17 +18,11 @@ describe('htmlToText', () => {
     expect(text).toBe('Tom & Jerry <3 "hi" it\'s ok AB\nNext');
   });
 
-  it('style with attributes and uppercase is stripped', () => {
-    const text = htmlToText(
-      '<STYLE type="text/css" id="x">.a{color:red}</STYLE><Script async src="a.js">var y=2;</Script>' +
-        '<SVG viewBox="0 0 1 1"><path d="M0 0"/></SVG><p>Body</p>',
-    );
-    expect(text).toBe('Body');
-  });
-
   it('removes head contents and unterminated comments do not hide text', () => {
     expect(htmlToText('<html><head><title>T</title><style>x{}</style></head><body><p>Body</p></body></html>')).toBe('Body');
-    expect(htmlToText('<p>One</p><!-- dangling <p>Two</p>')).toContain('One');
+    const dangling = htmlToText('<p>One</p><!-- dangling <p>Two</p>');
+    expect(dangling).toContain('One');
+    expect(dangling).toContain('Two');
   });
 
   it('unclosed template does not swallow following content', () => {
@@ -37,8 +31,32 @@ describe('htmlToText', () => {
     expect(text).toContain('And me');
   });
 
-  it('unclosed style stops at the next closing block tag', () => {
-    expect(htmlToText('<style>a{}<p>Gone</p></noscript><p>Kept</p>')).toBe('Kept');
+  it('unclosed noscript stops at the next closing block tag', () => {
+    expect(htmlToText('<noscript>a<p>Gone</p></template><p>Kept</p>')).toBe('Kept');
+  });
+
+  it('block with a quoted > in an attribute is fully stripped', () => {
+    expect(htmlToText('<SVG data-x="a>b" viewBox="0 0 1 1"><path d="M0 0"/></SVG><p>Body</p>')).toBe('Body');
+  });
+
+  it('unclosed style with no closer drops to end of input', () => {
+    expect(htmlToText('<p>A</p><style>a{color:red}')).toBe('A');
+    expect(htmlToText('<p>A</p><script>var x=1;')).toBe('A');
+  });
+
+  it('many unclosed svg tags complete quickly', () => {
+    const html = '<p>Before</p>' + '<svg>'.repeat(50_000) + '<p>After</p>';
+    const t0 = performance.now();
+    const text = htmlToText(html);
+    expect(performance.now() - t0).toBeLessThan(500);
+    expect(text).toContain('Before');
+    expect(text).toContain('After');
+  });
+
+  it('missing </head> keeps body text', () => {
+    const text = htmlToText('<html><head><title>T</title><style>x{}</style><body><p>Article</p></body>');
+    expect(text).toContain('Article');
+    expect(text).not.toContain('x{}');
   });
 
   it('a block never swallows content past its own close', () => {

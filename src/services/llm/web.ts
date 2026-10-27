@@ -23,41 +23,85 @@ function decodeEntities(s: string): string {
 
 const RAW_TEXT_BLOCKS = new Set(['script', 'style']);
 
-function blockEnd(html: string, from: number, name: string, closer: RegExp): number {
-  if (RAW_TEXT_BLOCKS.has(name)) {
-    const close = new RegExp(`</${name}\\s*>`, 'gi');
-    close.lastIndex = from;
-    const m = close.exec(html);
-    if (m) return m.index + m[0].length;
-  } else {
-    const tag = new RegExp(`<(/?)${name}\\b[^>]*>`, 'gi');
-    tag.lastIndex = from;
-    let depth = 1;
-    for (let m = tag.exec(html); m; m = tag.exec(html)) {
-      if (m[1]) depth--;
-      else if (!m[0].endsWith('/>')) depth++;
-      if (depth === 0) return m.index + m[0].length;
-    }
-  }
-  // Unclosed: drop only up to the next closing tag of any block kind, never to end-of-document.
-  closer.lastIndex = from;
-  const any = closer.exec(html);
-  return any ? any.index + any[0].length : -1;
-}
+// Attribute text may contain '>' inside short quoted values; the bound keeps a stray quote from scanning to end-of-input.
+const TAG_REST = `(?:[^>"']|"[^"]{0,2000}"|'[^']{0,2000}')*>`;
 
-/** Removes comments and the given blocks; an unclosed block loses only its own tag or the span up to the next block close. */
+/** Removes comments and the given blocks. Raw-text blocks (script, style) run to end-of-input when unclosed; other blocks drop only up to the next block close, or just their own tag. */
 export function stripBlocks(html: string, names: string[]): string {
   const alt = names.join('|');
-  const open = new RegExp(`<(${alt})\\b[^>]*>`, 'gi');
-  const closer = new RegExp(`</(?:${alt})\\s*>`, 'gi');
+  const open = new RegExp(`<(${alt})\\b${TAG_REST}`, 'gi');
+  const anyClose = new RegExp(`</(?:${alt})\\s*>`, 'gi');
+  const bodyOpen = /<body\b/gi;
   const src = html.replace(/<!--[\s\S]*?-->/g, '').replace(/<!--/g, '');
+
+  const rawClose = new Map<string, RegExp>();
+  const rawGone = new Set<string>(); // raw-text names with no closer past some earlier index, so none later either
+  const matched = new Map<string, Map<number, number>>(); // name -> opener index -> end of matching closer
+  let anyGone = false;
+  let anyCache: { from: number; at: number; end: number } | null = null;
+
+  const matchesFor = (name: string): Map<number, number> => {
+    let map = matched.get(name);
+    if (map) return map;
+    map = new Map();
+    const tag = new RegExp(`<(/?)${name}\\b${TAG_REST}`, 'gi');
+    const stack: number[] = [];
+    for (let m = tag.exec(src); m; m = tag.exec(src)) {
+      if (m[1]) {
+        const opener = stack.pop();
+        if (opener !== undefined) map.set(opener, m.index + m[0].length);
+      } else if (!m[0].endsWith('/>')) stack.push(m.index);
+    }
+    matched.set(name, map);
+    return map;
+  };
+
+  const nextAnyClose = (from: number): number => {
+    if (anyGone) return -1;
+    if (anyCache && from >= anyCache.from && from <= anyCache.at) return anyCache.end;
+    anyClose.lastIndex = from;
+    const m = anyClose.exec(src);
+    if (!m) {
+      anyGone = true;
+      return -1;
+    }
+    anyCache = { from, at: m.index, end: m.index + m[0].length };
+    return anyCache.end;
+  };
+
   let out = '';
   let pos = 0;
   for (let m = open.exec(src); m; m = open.exec(src)) {
     out += src.slice(pos, m.index);
     const tagEnd = m.index + m[0].length;
-    const end = m[0].endsWith('/>') ? tagEnd : blockEnd(src, tagEnd, (m[1] as string).toLowerCase(), closer);
-    pos = end === -1 ? tagEnd : end;
+    const name = (m[1] as string).toLowerCase();
+    let end = tagEnd;
+    if (!m[0].endsWith('/>')) {
+      if (RAW_TEXT_BLOCKS.has(name)) {
+        let found = -1;
+        if (!rawGone.has(name)) {
+          let re = rawClose.get(name);
+          if (!re) rawClose.set(name, (re = new RegExp(`</${name}\\s*>`, 'gi')));
+          re.lastIndex = tagEnd;
+          const c = re.exec(src);
+          if (c) found = c.index + c[0].length;
+          else rawGone.add(name);
+        }
+        end = found === -1 ? src.length : found;
+      } else {
+        const own = matchesFor(name).get(m.index);
+        if (own !== undefined) end = own;
+        else if (name === 'head') {
+          bodyOpen.lastIndex = tagEnd;
+          const b = bodyOpen.exec(src);
+          if (b) end = b.index;
+        } else {
+          const any = nextAnyClose(tagEnd);
+          if (any !== -1) end = any;
+        }
+      }
+    }
+    pos = end;
     open.lastIndex = pos;
   }
   return out + src.slice(pos);
