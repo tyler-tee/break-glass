@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Logger, TrackedFields } from '../../domain/types.js';
 import { LlmRefusalError, LlmValidationError, type LlmProvider } from './provider.js';
@@ -12,7 +13,17 @@ export const ExtractionSchema = z.object({
 });
 
 export type Extraction = z.infer<typeof ExtractionSchema>;
-export type Extractor = (website: string) => Promise<Extraction | null>;
+export type ExtractResult = { extraction: Extraction | null; pageHash: string | null };
+// When skipIfHash equals the fetched page hash, the LLM is not called and extraction is null.
+export type Extractor = (website: string, opts?: { skipIfHash?: string | null }) => Promise<ExtractResult>;
+
+export function hashPages(pages: { url: string; text: string }[]): string {
+  const h = createHash('sha256');
+  for (const p of pages) h.update(`${p.url}
+${p.text}
+`);
+  return h.digest('hex');
+}
 
 const MAX_PROMPT_CHARS = 60_000;
 
@@ -47,14 +58,17 @@ export function makeExtractor(deps: {
   lookup?: LookupFn;
 }): Extractor {
   const { llm, model, log } = deps;
-  return async (website) => {
+  return async (website, opts) => {
+    let pageHash: string | null = null;
     try {
       const pages = await fetchWebsiteText(website, {
         fetch: deps.fetch,
         log,
         ...(deps.lookup ? { lookup: deps.lookup } : {}),
       });
-      if (pages.length === 0) return null;
+      if (pages.length === 0) return { extraction: null, pageHash };
+      pageHash = hashPages(pages);
+      if (opts?.skipIfHash != null && opts.skipIfHash === pageHash) return { extraction: null, pageHash };
       const { system, prompt } = buildExtractionPrompt(pages);
       const result = await llm.generateJson({
         model,
@@ -71,7 +85,7 @@ export function makeExtractor(deps: {
           insuranceNotes: result.insuranceNotes.sourceUrl,
         })}`,
       );
-      return result;
+      return { extraction: result, pageHash };
     } catch (e) {
       if (e instanceof LlmValidationError) {
         log.warn(`extraction for ${website} failed validation: ${e.raw.slice(0, 200)}`);
@@ -80,7 +94,7 @@ export function makeExtractor(deps: {
       } else {
         log.error(`extraction for ${website} failed: ${e instanceof Error ? e.message : String(e)}`);
       }
-      return null;
+      return { extraction: null, pageHash };
     }
   };
 }

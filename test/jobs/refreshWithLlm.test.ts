@@ -1,15 +1,17 @@
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Db } from '../../src/db/client.js';
 import { locationChanges, locationSnapshots, locations } from '../../src/db/schema.js';
 import { hashTracked, normalizeTracked } from '../../src/domain/snapshot.js';
 import type { TrackedFields } from '../../src/domain/types.js';
 import { createCategory } from '../../src/features/categories/repo.js';
 import { refreshLocations } from '../../src/jobs/refreshLocations.js';
-import type { Extraction, Extractor } from '../../src/services/llm/extract.js';
+import { makeExtractor, type Extraction, type Extractor } from '../../src/services/llm/extract.js';
+import type { LlmProvider } from '../../src/services/llm/provider.js';
 import { CallBudget } from '../../src/services/places/client.js';
 import { recordingFetch } from '../helpers/recordingFetch.js';
+import { fakeSiteFetch } from '../helpers/fakeSiteFetch.js';
 import { createTestDb } from '../helpers/testDb.js';
 
 const FIXTURE_DIR = path.resolve(import.meta.dirname, '../fixtures/places');
@@ -81,7 +83,7 @@ function seedRow(): number {
 describe('refreshLocations with extraction', () => {
   it('refresh with malformed extraction completes and keeps notes unchanged', async () => {
     const id = seedRow();
-    const report = await refreshLocations(db, deps(async () => null));
+    const report = await refreshLocations(db, deps(async () => ({ extraction: null, pageHash: null })));
     expect(report).toMatchObject({ checked: 1, failed: 0, extracted: 0 });
     expect(db.select().from(locationChanges).where(eq(locationChanges.locationId, id)).all()).toHaveLength(0);
     const row = db.select().from(locations).where(eq(locations.id, id)).get()!;
@@ -96,10 +98,69 @@ describe('refreshLocations with extraction', () => {
       walkIns: { value: null, sourceUrl: null },
       insuranceNotes: { value: 'Now accepts Aetna', sourceUrl: 'https://near-dental.example/insurance' },
     };
-    const report = await refreshLocations(db, deps(async () => extraction));
+    const report = await refreshLocations(db, deps(async () => ({ extraction, pageHash: 'h1' })));
     expect(report).toMatchObject({ checked: 1, warned: 1, extracted: 1 });
     const changes = db.select().from(locationChanges).where(eq(locationChanges.locationId, id)).all();
     expect(changes.map((c) => c.field)).toEqual(['insuranceNotes']);
     expect(db.select().from(locations).where(eq(locations.id, id)).get()!.status).toBe('warn');
+  });
+
+  describe('page-hash gating', () => {
+    const WEB_DIR = path.resolve(import.meta.dirname, '../fixtures/web');
+    const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+    let call = 0;
+    const generateJson = vi.fn(async () => {
+      call++;
+      return {
+        afterHoursNotes: { value: `Reworded note ${call}`, sourceUrl: null },
+        walkIns: { value: null, sourceUrl: null },
+        insuranceNotes: { value: null, sourceUrl: null },
+      };
+    });
+    const llm = { generateJson } as unknown as LlmProvider;
+    const extractorOver = (siteFetch: typeof fetch) =>
+      makeExtractor({ llm, fetch: siteFetch, model: 'm', log: silent, lookup: publicLookup });
+    const changed = (base: typeof fetch): typeof fetch =>
+      (async (input: string | URL | Request, init?: RequestInit) => {
+        const res = await base(input, init);
+        const text = await res.text();
+        return new Response(text.replace('</body>', '<p>New hours notice</p></body>'), {
+          status: res.status,
+          headers: res.headers,
+        });
+      }) as typeof fetch;
+
+    beforeEach(() => {
+      call = 0;
+      generateJson.mockClear();
+    });
+
+    it('refresh skips extraction when the page is unchanged', async () => {
+      const id = seedRow();
+      const extract = extractorOver(fakeSiteFetch(WEB_DIR));
+      await refreshLocations(db, deps(extract));
+      expect(generateJson).toHaveBeenCalledTimes(1);
+      const hash = db.select().from(locations).where(eq(locations.id, id)).get()!.websiteHash;
+      expect(hash).toMatch(/^[0-9a-f]{64}$/);
+
+      const changesAfterFirst = db.select().from(locationChanges).where(eq(locationChanges.locationId, id)).all().length;
+      const report = await refreshLocations(db, deps(extract));
+      expect(generateJson).toHaveBeenCalledTimes(1);
+      expect(report.extracted).toBe(0);
+      expect(db.select().from(locationChanges).where(eq(locationChanges.locationId, id)).all()).toHaveLength(
+        changesAfterFirst,
+      );
+    });
+
+    it('refresh re-extracts when the page changed', async () => {
+      const id = seedRow();
+      await refreshLocations(db, deps(extractorOver(fakeSiteFetch(WEB_DIR))));
+      const firstHash = db.select().from(locations).where(eq(locations.id, id)).get()!.websiteHash;
+      const report = await refreshLocations(db, deps(extractorOver(changed(fakeSiteFetch(WEB_DIR)))));
+      expect(generateJson).toHaveBeenCalledTimes(2);
+      expect(report.extracted).toBe(1);
+      const secondHash = db.select().from(locations).where(eq(locations.id, id)).get()!.websiteHash;
+      expect(secondHash).not.toBe(firstHash);
+    });
   });
 });

@@ -43,6 +43,8 @@ export const locations = sqliteTable(
     address: text('address'),
     phone: text('phone'),
     website: text('website'),
+    // Hash of the website page text last sent to the extractor; gates re-extraction on refresh.
+    websiteHash: text('website_hash'),
     lat: real('lat'),
     lng: real('lng'),
     distanceMi: real('distance_mi'),

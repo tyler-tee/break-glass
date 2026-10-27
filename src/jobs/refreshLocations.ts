@@ -59,6 +59,8 @@ export async function refreshLocations(
     let counted = false;
     try {
       let next: TrackedFields | null = null;
+      let newHash: string | undefined;
+      const prevSnapshot = latestSnapshot(db, row.id);
       try {
         const details = await placeDetails(row.placeId!, places);
         // LLM note fields are carried forward from the row unless extraction returns something.
@@ -70,9 +72,27 @@ export async function refreshLocations(
         };
         const website = tracked.website ?? row.website;
         if (extract && website) {
-          const extraction = await extract(website);
-          if (extraction) report.extracted++;
-          tracked = applyExtraction(tracked, extraction);
+          const hasNotes = row.afterHoursNotes !== null || row.walkIns !== null || row.insuranceNotes !== null;
+          const result = await extract(website, hasNotes ? { skipIfHash: row.websiteHash } : undefined);
+          if (hasNotes && result.pageHash !== null && result.pageHash === row.websiteHash) {
+            // Page text unchanged: carry the notes forward from the last snapshot instead of re-extracting.
+            if (prevSnapshot) {
+              const p = prevSnapshot.payload;
+              tracked = {
+                ...tracked,
+                afterHoursNotes: p.afterHoursNotes ?? null,
+                walkIns: p.walkIns ?? null,
+                insuranceNotes: p.insuranceNotes ?? null,
+              };
+            }
+          } else {
+            if (result.extraction) {
+              report.extracted++;
+              // Only remember the hash once extraction succeeded, so a failed run is retried.
+              if (result.pageHash !== null) newHash = result.pageHash;
+            }
+            tracked = applyExtraction(tracked, result.extraction);
+          }
         }
         next = normalizeTracked(tracked);
       } catch (e) {
@@ -106,11 +126,15 @@ export async function refreshLocations(
       }
 
       const snapshot = next;
-      const prevSnapshot = latestSnapshot(db, row.id);
       if (prevSnapshot === null) {
         db.transaction((tx) => {
           insertSnapshot(tx, { locationId: row.id, fetchedAt: at, payload: snapshot, hash: hashTracked(snapshot) });
-          updateLocationRow(tx, row.id, { lastVerifiedAt: at, consecutiveFetchFailures: 0, updatedAt: at });
+          updateLocationRow(tx, row.id, {
+            lastVerifiedAt: at,
+            consecutiveFetchFailures: 0,
+            updatedAt: at,
+            ...(newHash !== undefined && { websiteHash: newHash }),
+          });
         });
         report.baselined++;
         continue;
@@ -128,6 +152,7 @@ export async function refreshLocations(
           consecutiveFetchFailures: decision.failures,
           updatedAt: at,
           ...(decision.touchVerified && { lastVerifiedAt: at }),
+          ...(newHash !== undefined && { websiteHash: newHash }),
         });
       });
       if (decision.status === 'warn' && decision.changeRows.length > 0) report.warned++;

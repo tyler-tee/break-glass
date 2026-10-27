@@ -60,18 +60,18 @@ describe('makeExtractor', () => {
 
   it('populates notes from fixture pages', async () => {
     const e = await extractor()('https://near-dental.example/');
-    expect(e?.afterHoursNotes.value).toContain('on-call');
-    expect(e?.insuranceNotes.value).toContain('Delta Dental');
+    expect(e.extraction?.afterHoursNotes.value).toContain('on-call');
+    expect(e.extraction?.insuranceNotes.value).toContain('Delta Dental');
   });
 
   it('returns null fields for unstated items', async () => {
     const e = await extractor()('https://near-dental.example/');
-    expect(e?.walkIns.value).toBeNull();
+    expect(e.extraction?.walkIns.value).toBeNull();
   });
 
   it('malformed LLM fixture → extractor returns null and logs', async () => {
     const log = logger();
-    expect(await extractor({ log })('https://bad-dental.example/')).toBeNull();
+    expect((await extractor({ log })('https://bad-dental.example/')).extraction).toBeNull();
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('not json'));
   });
 
@@ -82,7 +82,7 @@ describe('makeExtractor', () => {
         throw new LlmRefusalError('cyber');
       },
     };
-    expect(await extractor({ llm, log })('https://near-dental.example/')).toBeNull();
+    expect((await extractor({ llm, log })('https://near-dental.example/')).extraction).toBeNull();
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('cyber'));
   });
 
@@ -93,7 +93,7 @@ describe('makeExtractor', () => {
         throw new Error('boom');
       },
     };
-    expect(await extractor({ llm, log })('https://near-dental.example/')).toBeNull();
+    expect((await extractor({ llm, log })('https://near-dental.example/')).extraction).toBeNull();
     expect(log.error).toHaveBeenCalled();
   });
 
@@ -103,7 +103,17 @@ describe('makeExtractor', () => {
       throw new TypeError('fetch failed');
     }) as unknown as typeof fetch;
     const out = await extractor({ llm: { generateJson } as LlmProvider, fetch: failing })('https://near-dental.example/');
-    expect(out).toBeNull();
+    expect(out).toEqual({ extraction: null, pageHash: null });
+    expect(generateJson).not.toHaveBeenCalled();
+  });
+
+  it('returns a stable page hash and skips the LLM when it matches skipIfHash', async () => {
+    const first = await extractor()('https://near-dental.example/');
+    expect(first.pageHash).toMatch(/^[0-9a-f]{64}$/);
+    const generateJson = vi.fn();
+    const llm = { generateJson } as LlmProvider;
+    const again = await extractor({ llm })('https://near-dental.example/', { skipIfHash: first.pageHash });
+    expect(again).toEqual({ extraction: null, pageHash: first.pageHash });
     expect(generateJson).not.toHaveBeenCalled();
   });
 

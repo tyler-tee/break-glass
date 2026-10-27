@@ -81,11 +81,14 @@ describe('runDiscovery', () => {
   it('discovery runs the extractor for candidates with websites', async () => {
     const extract = vi.fn<Extractor>(async (website) =>
       website !== 'https://near-dental.example'
-        ? null
+        ? { extraction: null, pageHash: null }
         : {
-            afterHoursNotes: { value: 'Call the on-call line', sourceUrl: null },
-            walkIns: { value: true, sourceUrl: null },
-            insuranceNotes: { value: 'Accepts Delta Dental', sourceUrl: null },
+            extraction: {
+              afterHoursNotes: { value: 'Call the on-call line', sourceUrl: null },
+              walkIns: { value: true, sourceUrl: null },
+              insuranceNotes: { value: 'Accepts Delta Dental', sourceUrl: null },
+            },
+            pageHash: 'hash-near',
           },
     );
     const report = await runDiscovery(db, categoryId, { ...discoveryDeps(), extract });
@@ -99,6 +102,7 @@ describe('runDiscovery', () => {
       insuranceNotes: 'Accepts Delta Dental',
     });
     expect(rows().find((l) => l.placeId === 'ChIJfar')!.insuranceNotes).toBeNull();
+    expect(near.websiteHash).toBe('hash-near');
   });
 
   it('skips places already stored as rejected', async () => {

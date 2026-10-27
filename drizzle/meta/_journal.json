@@ -15,6 +15,13 @@
       "when": 1793132746374,
       "tag": "0001_minor_odin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793134928586,
+      "tag": "0002_groovy_moonstone",
+      "breakpoints": true
     }
   ]
 }

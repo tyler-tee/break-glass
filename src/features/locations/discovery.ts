@@ -138,13 +138,14 @@ export async function runDiscovery(
 
       if (extract && website) {
         try {
-          const e = await extract(website);
+          const { extraction: e, pageHash } = await extract(website);
           if (e) {
             db.update(locations)
               .set({
                 afterHoursNotes: e.afterHoursNotes.value,
                 walkIns: e.walkIns.value,
                 insuranceNotes: e.insuranceNotes.value,
+                websiteHash: pageHash,
               })
               .where(eq(locations.id, inserted.id))
               .run();
