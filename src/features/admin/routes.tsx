@@ -3,6 +3,7 @@ import { deleteCookie } from 'hono/cookie';
 import type { AppDeps } from '../../app.js';
 import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
+import { categoriesRoutes } from '../categories/routes.js';
 import { settingsRoutes } from './settingsRoutes.js';
 import { SESSION_COOKIE, createSession, requireAdmin, verifyPassword } from './auth.js';
 
@@ -59,6 +60,7 @@ export function adminRoutes(deps: AppDeps): Hono {
   );
 
   app.route('/settings', settingsRoutes(deps));
+  app.route('/categories', categoriesRoutes(deps));
 
   app.post('/logout', (c) => {
     deleteCookie(c, SESSION_COOKIE, { path: '/' });

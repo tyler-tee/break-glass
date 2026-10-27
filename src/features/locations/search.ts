@@ -1,10 +1,10 @@
 import { sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import type { categories } from '../../db/schema.js';
+import { getCategoryBySlug } from '../categories/repo.js';
 import { isOpenNow } from '../../domain/hours.js';
 import type { FieldChange } from '../../domain/types.js';
 import {
-  getCategoryBySlug,
   getVisibleRow,
   listOpenChanges,
   listVisibleRows,

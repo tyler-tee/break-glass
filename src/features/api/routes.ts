@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { AppDeps } from '../../app.js';
 import { requestClock } from '../clock.js';
-import { getCategoryBySlug, listCategories } from '../locations/repo.js';
+import { getCategoryBySlug, listCategories } from '../categories/repo.js';
 import {
   getVisibleLocation,
   listVisibleByCategory,

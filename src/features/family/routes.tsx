@@ -3,7 +3,7 @@ import type { AppDeps } from '../../app.js';
 import { requestClock } from '../clock.js';
 import { LocationCard } from '../../web/components/LocationCard.js';
 import { page } from '../../web/Layout.js';
-import { getCategoryBySlug, listCategories } from '../locations/repo.js';
+import { getCategoryBySlug, listCategories } from '../categories/repo.js';
 import { getVisibleLocation, listVisibleByCategory, searchLocations } from '../locations/search.js';
 
 export function familyRoutes(deps: AppDeps): Hono {

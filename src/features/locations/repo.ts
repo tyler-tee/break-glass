@@ -41,11 +41,3 @@ export function listOpenChanges(db: Db, locationId: number): FieldChange[] {
       newValue: c.newValue,
     }));
 }
-
-export function listCategories(db: Db): (typeof categories.$inferSelect)[] {
-  return db.select().from(categories).orderBy(categories.name).all();
-}
-
-export function getCategoryBySlug(db: Db, slug: string): typeof categories.$inferSelect | null {
-  return db.select().from(categories).where(eq(categories.slug, slug)).get() ?? null;
-}
