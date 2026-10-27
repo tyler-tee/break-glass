@@ -3,6 +3,8 @@ import { createApp } from '../../src/app.js';
 import type { Db } from '../../src/db/client.js';
 import { loadEnv } from '../../src/env.js';
 import { hashPassword } from '../../src/features/admin/auth.js';
+import { categories, locations } from '../../src/db/schema.js';
+import { haversineMi } from '../../src/domain/ranking.js';
 import { getSettings } from '../../src/features/admin/settingsRepo.js';
 import { adminLogin } from '../helpers/adminLogin.js';
 import { createTestDb } from '../helpers/testDb.js';
@@ -86,5 +88,30 @@ describe('admin settings', () => {
       protocolRefreshCron: '0 5 2 * *',
     });
     expect(reschedule).toHaveBeenCalledTimes(1);
+  });
+
+  it('saving a new home recomputes every location distance', async () => {
+    const cat = db.insert(categories).values({ name: 'Dentist', slug: 'dentist', searchTerms: [] }).returning().get();
+    const at = new Date();
+    const add = (name: string, lat: number | null, lng: number | null) =>
+      db
+        .insert(locations)
+        .values({ categoryId: cat.id, name, lat, lng, distanceMi: 99, createdAt: at, updatedAt: at })
+        .returning()
+        .get().id;
+    const a = add('A', 40.7, -111.8);
+    const b = add('B', 40.9, -111.9);
+    const noCoords = add('C', null, null);
+    const dist = (id: number) => db.select().from(locations).all().find((l) => l.id === id)!.distanceMi;
+
+    expect((await post(valid)).status).toBe(302);
+    expect(dist(a)).toBeCloseTo(haversineMi({ lat: 40.5, lng: -111.9 }, { lat: 40.7, lng: -111.8 }), 6);
+    expect(dist(b)).toBeCloseTo(haversineMi({ lat: 40.5, lng: -111.9 }, { lat: 40.9, lng: -111.9 }), 6);
+    expect(dist(noCoords)).toBe(99);
+
+    const { updateSettings } = await import('../../src/features/admin/settingsRepo.js');
+    updateSettings(db, { homeLat: null, homeLng: null });
+    expect(dist(a)).toBeNull();
+    expect(dist(b)).toBeNull();
   });
 });

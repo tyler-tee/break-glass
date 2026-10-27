@@ -1,7 +1,8 @@
 import cron from 'node-cron';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
-import { settings } from '../../db/schema.js';
+import { locations, settings } from '../../db/schema.js';
+import { haversineMi } from '../../domain/ranking.js';
 
 export type Settings = typeof settings.$inferSelect;
 
@@ -68,6 +69,24 @@ export function updateSettings(db: Db, patch: SettingsPatch): Settings {
     throw new SettingsValidationError('protocol_refresh_cron', 'protocol_refresh_cron is not a valid cron expression');
   }
 
-  db.update(settings).set(patch).where(eq(settings.id, 1)).run();
+  const current = getSettings(db);
+  const homeChanged = next.homeLat !== current.homeLat || next.homeLng !== current.homeLng;
+  db.transaction((tx) => {
+    tx.update(settings).set(patch).where(eq(settings.id, 1)).run();
+    if (!homeChanged) return;
+    // Stored distances are relative to home, so they must follow it.
+    const home = next.homeLat !== null && next.homeLng !== null ? { lat: next.homeLat, lng: next.homeLng } : null;
+    if (home === null) {
+      tx.update(locations).set({ distanceMi: null }).run();
+      return;
+    }
+    for (const l of tx.select({ id: locations.id, lat: locations.lat, lng: locations.lng }).from(locations).all()) {
+      if (l.lat === null || l.lng === null) continue;
+      tx.update(locations)
+        .set({ distanceMi: haversineMi(home, { lat: l.lat, lng: l.lng }) })
+        .where(eq(locations.id, l.id))
+        .run();
+    }
+  });
   return getSettings(db);
 }
