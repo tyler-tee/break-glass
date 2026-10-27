@@ -1,14 +1,14 @@
 import { Hono } from 'hono';
 import type { AppDeps } from '../../app.js';
+import { requestClock } from '../clock.js';
 import { LocationCard } from '../../web/components/LocationCard.js';
 import { page } from '../../web/Layout.js';
-import { getCategoryBySlug, getSettings, listCategories } from '../locations/repo.js';
+import { getCategoryBySlug, listCategories } from '../locations/repo.js';
 import { getVisibleLocation, listVisibleByCategory, searchLocations } from '../locations/search.js';
 
 export function familyRoutes(deps: AppDeps): Hono {
   const { db } = deps;
-  const now = () => (deps.now ?? (() => new Date()))();
-  const tz = () => getSettings(db).homeTz;
+  const { now, tz } = requestClock(deps);
   const app = new Hono();
 
   app.get('/', (c) => {

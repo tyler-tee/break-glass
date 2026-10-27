@@ -57,9 +57,21 @@ export function searchLocations(db: Db, q: string, now: Date, tz: string): Categ
       .map((r) => r.id),
   );
 
+  return groupRows(
+    db,
+    listVisibleRows(db).filter((r) => matchedCategoryIds.has(r.categoryId) || matchedLocationIds.has(r.id)),
+    now,
+    tz,
+  );
+}
+
+export function listVisibleGrouped(db: Db, now: Date, tz: string): CategoryGroup[] {
+  return groupRows(db, listVisibleRows(db), now, tz);
+}
+
+function groupRows(db: Db, rows: VisibleLocationRow[], now: Date, tz: string): CategoryGroup[] {
   const groups = new Map<number, CategoryGroup>();
-  for (const row of listVisibleRows(db)) {
-    if (!matchedCategoryIds.has(row.categoryId) && !matchedLocationIds.has(row.id)) continue;
+  for (const row of rows) {
     let group = groups.get(row.categoryId);
     if (!group) {
       group = { category: row.category, locations: [] };
