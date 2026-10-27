@@ -21,8 +21,9 @@ export function familyRoutes(deps: AppDeps): Hono {
 
   app.get('/', (c) => {
     const cats = listCategories(db);
-    const number =
-      db.select({ n: settings.emergencyNumber }).from(settings).where(eq(settings.id, 1)).get()?.n?.trim() || '911';
+    const stored =
+      db.select({ n: settings.emergencyNumber }).from(settings).where(eq(settings.id, 1)).get()?.n?.trim() || '';
+    const number = /\d/.test(stored) ? stored : '911';
     const counts = new Map(listVisibleGrouped(db, now(), tz()).map((g) => [g.category.id, g.locations.length]));
     return page(
       c,

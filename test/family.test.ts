@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { Db } from '../src/db/client.js';
-import { categories, locationChanges, locations } from '../src/db/schema.js';
+import { categories, locationChanges, locations, settings } from '../src/db/schema.js';
 import { seed } from '../src/db/seed.js';
 import { loadEnv } from '../src/env.js';
 import { eq } from 'drizzle-orm';
@@ -84,6 +84,29 @@ describe('family pages', () => {
     expect(html).toContain('Bare Dental');
     expect(html).toContain('Hours unknown');
     expect(html).not.toContain(' mi');
+  });
+
+  it('location page has side-by-side Call and Directions and a native details block', async () => {
+    const row = insertDentist({
+      name: 'Detail Dental',
+      phone: '+1 801 555 0199',
+      address: '1 Main St',
+      afterHoursNotes: 'Ring bell',
+    });
+    const html = await (await app.request(`/l/${row.id}`)).text();
+    expect(html).toContain('<details');
+    expect(html).toContain('href="tel:+18015550199"');
+    expect(html).toMatch(/<a class="directions" href="https:\/\/[^"]+"[^>]*>[\s\S]*?Directions/);
+    expect(html).toContain('Ring bell');
+    expect(html.indexOf('Ring bell')).toBeGreaterThan(html.indexOf('<details'));
+    expect(html.indexOf('Hours unknown')).toBeLessThan(html.indexOf('<details'));
+  });
+
+  it('home falls back to 911 when the stored number has no digits', async () => {
+    db.update(settings).set({ emergencyNumber: 'abc' }).where(eq(settings.id, 1)).run();
+    const html = await (await app.request('/')).text();
+    expect(html).toContain('href="tel:911"');
+    expect(html).toContain('Call 911');
   });
 
   it('closed permanently sorts last', async () => {

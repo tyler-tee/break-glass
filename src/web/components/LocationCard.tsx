@@ -33,6 +33,7 @@ export const LocationCard: FC<{ location: LocationView; showCategory?: boolean }
   const summary = l.openChanges.length
     ? [...new Set(l.openChanges.map((c) => c.field))].join(', ')
     : 'Details changed';
+  const hasDetails = Boolean(l.hours || l.afterHoursNotes || l.walkIns !== null || l.insuranceNotes);
   return (
     <article class="card">
       <h3>
@@ -46,24 +47,31 @@ export const LocationCard: FC<{ location: LocationView; showCategory?: boolean }
       ) : l.status === 'warn' ? (
         <WarningBadge kind="warn" summary={summary} />
       ) : null}
-      {l.phone ? (
-        <a class="call" href={telHref(l.phone)}>
-          <Icon name="phone" /> Call {l.phone}
+      <div class="actions">
+        {l.phone ? (
+          <a class="call" href={telHref(l.phone)}>
+            <Icon name="phone" /> Call {l.phone}
+          </a>
+        ) : null}
+        <a class="directions" href={mapsHref(l)}>
+          <Icon name="map-pin" /> Directions
         </a>
+      </div>
+      {hasDetails ? (
+        <details class="details">
+          <summary>Hours and details</summary>
+          {l.hours ? (
+            <ul class="hours">
+              {l.hours.weekdayText.map((line) => (
+                <li>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+          {l.afterHoursNotes ? <p>After hours: {l.afterHoursNotes}</p> : null}
+          {l.walkIns !== null ? <p>Walk-ins: {l.walkIns ? 'yes' : 'no'}</p> : null}
+          {l.insuranceNotes ? <p>Insurance: {l.insuranceNotes}</p> : null}
+        </details>
       ) : null}
-      <a class="row" href={mapsHref(l)}>
-        <Icon name="map-pin" /> Open in maps
-      </a>
-      {l.hours ? (
-        <ul class="hours">
-          {l.hours.weekdayText.map((line) => (
-            <li>{line}</li>
-          ))}
-        </ul>
-      ) : null}
-      {l.afterHoursNotes ? <p>After hours: {l.afterHoursNotes}</p> : null}
-      {l.walkIns !== null ? <p>Walk-ins: {l.walkIns ? 'yes' : 'no'}</p> : null}
-      {l.insuranceNotes ? <p>Insurance: {l.insuranceNotes}</p> : null}
     </article>
   );
 };
