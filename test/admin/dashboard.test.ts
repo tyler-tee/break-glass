@@ -3,6 +3,8 @@ import { createApp } from '../../src/app.js';
 import type { Db } from '../../src/db/client.js';
 import { loadEnv } from '../../src/env.js';
 import { hashPassword } from '../../src/features/admin/auth.js';
+import { categories, locations, protocols } from '../../src/db/schema.js';
+import { insertVersion } from '../../src/features/protocols/repo.js';
 import { dbLedger } from '../../src/services/places/budget.js';
 import { adminLogin } from '../helpers/adminLogin.js';
 import { createTestDb } from '../helpers/testDb.js';
@@ -38,5 +40,18 @@ describe('admin dashboard', () => {
     const html = await dashboard({ PLACES_MONTHLY_CAP: '100' });
     expect(html).toContain('Places calls this month: 80 / 100');
     expect(html).toContain('nearing the monthly cap');
+  });
+
+  it('overview shows linked counts', async () => {
+    const cat = db.insert(categories).values({ name: 'Dentist', slug: 'dentist', searchTerms: ['dentist'] } as never).returning().get();
+    db.insert(locations)
+      .values({ categoryId: cat.id, name: 'Smile Co', status: 'approved', createdAt: now, updatedAt: now })
+      .run();
+    const p = db.insert(protocols).values({ slug: 'cpr', title: 'CPR', tags: [] }).returning().get();
+    insertVersion(db, { protocolId: p.id, version: 1, status: 'published', bodyMd: 'x', createdAt: now, reviewedAt: now });
+    const html = await dashboard();
+    const section = html.slice(html.indexOf('class="overview'));
+    expect(section).toMatch(/<a href="\/admin\/locations"[^>]*>[\s\S]*?>1<[\s\S]*?approved place/);
+    expect(section).toMatch(/<a href="\/admin\/protocols"[^>]*>[\s\S]*?>1<[\s\S]*?published protocol/);
   });
 });

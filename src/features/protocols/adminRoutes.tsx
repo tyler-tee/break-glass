@@ -84,7 +84,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         <h1>{protocol.title}</h1>
         {opts.error && <p role="alert">{opts.error}</p>}
         <h2>Versions</h2>
-        <table>
+        <table class="stack-table t-versions">
           <thead>
             <tr>
               <th>Version</th>
@@ -146,12 +146,6 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
       c,
       `${protocol.title} v${version.version}`,
       <>
-        <style
-          dangerouslySetInnerHTML={{
-            __html:
-              '.review{display:flex;flex-wrap:wrap;gap:16px}.review>section{flex:1 1 320px;min-width:0}.review textarea{width:100%}',
-          }}
-        />
         <h1>
           {protocol.title} v{version.version}
         </h1>
@@ -204,7 +198,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
               <label>
                 Notes <input name="notes" required />
               </label>
-              <button type="submit">Reject</button>
+              <button type="submit" class="btn-danger">Reject</button>
             </form>
           </>
         )}
@@ -274,7 +268,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         <p>
           <a href="/admin/protocols/new">New protocol</a>
         </p>
-        <table>
+        <table class="stack-table t-protocols">
           <thead>
             <tr>
               <th>Title</th>

@@ -86,8 +86,9 @@ describe('layouts', () => {
     const app = await mkApp();
     const cookie = await adminLogin(app, 'correct horse');
     const get = async () => (await app.request('/admin', { headers: { cookie } })).text();
-    expect(await get()).toContain('href="/admin/setup"');
+    expect(await get()).toContain('<li><a href="/admin/setup"');
     db.update(settings).set({ setupCompletedAt: new Date() }).where(eq(settings.id, 1)).run();
-    expect(await get()).not.toContain('href="/admin/setup"');
+    // The overview itself links "Run setup again" once ready; only the nav item must disappear.
+    expect(await get()).not.toContain('<li><a href="/admin/setup"');
   });
 });

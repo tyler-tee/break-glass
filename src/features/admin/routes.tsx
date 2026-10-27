@@ -5,6 +5,9 @@ import { page } from '../../web/Layout.js';
 import { categoriesRoutes } from '../categories/routes.js';
 import { candidatesRoutes, locationsAdminRoutes, warnRoutes } from '../locations/adminRoutes.js';
 import { protocolsAdminRoutes } from '../protocols/adminRoutes.js';
+import { installState } from './install.js';
+import { listLocations } from '../locations/repo.js';
+import { getPublished, listProtocols } from '../protocols/repo.js';
 import { settingsRoutes } from './settingsRoutes.js';
 import type { JobName, RunResult } from '../../jobs/scheduler.js';
 import { newPlacesBudget } from '../../services/places/budget.js';
@@ -61,6 +64,17 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
     const result = c.req.query('result');
     const monthUsed = newPlacesBudget(deps.db, env, now).monthUsed();
     const monthlyCap = env.PLACES_MONTHLY_CAP;
+    const locs = listLocations(deps.db);
+    const count = (status: string) => locs.filter((l) => l.status === status).length;
+    const needsRereview = listProtocols(deps.db).filter((p) => p.needsRereview).length;
+    const stats: { href: string; n: number; one: string; many: string }[] = [
+      { href: '/admin/locations', n: count('approved'), one: 'approved place', many: 'approved places' },
+      { href: '/admin/candidates', n: count('candidate'), one: 'candidate awaiting review', many: 'candidates awaiting review' },
+      { href: '/admin/warn', n: count('warn'), one: 'warning', many: 'warnings' },
+      { href: '/admin/protocols', n: getPublished(deps.db).length, one: 'published protocol', many: 'published protocols' },
+      { href: '/admin/protocols', n: needsRereview, one: 'protocol needing re-review', many: 'protocols needing re-review' },
+    ];
+    const incomplete = installState(deps) === 'incomplete';
     return page(
       c,
       'Admin',
@@ -71,18 +85,52 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
             {job}: {result}
           </p>
         )}
-        <p>
-          Places calls this month: {monthUsed} / {monthlyCap}
-        </p>
-        {monthUsed >= monthlyCap * 0.8 && (
-          <p role="alert">Places usage is nearing the monthly cap; discovery and refresh stop once it is reached.</p>
+        {incomplete ? (
+          <section class="setup-card" aria-labelledby="setup-card-title">
+            <h2 id="setup-card-title">Finish setting up</h2>
+            <p>A few steps are left before the family site is ready.</p>
+            <a class="btn" href="/admin/setup">
+              Continue setup
+            </a>
+          </section>
+        ) : (
+          <p class="setup-again">
+            <a href="/admin/setup">Run setup again</a>
+          </p>
         )}
-        <form method="post" action="/admin/jobs/refreshLocations/run">
-          <button type="submit">Run location refresh now</button>
-        </form>
-        <form method="post" action="/admin/jobs/recheckProtocols/run">
-          <button type="submit">Re-check protocols now</button>
-        </form>
+        <section class="overview" aria-labelledby="overview-title">
+          <h2 id="overview-title" class="sr-only">
+            At a glance
+          </h2>
+          <div class="stat-grid">
+            {stats.map((s) => (
+              <a href={s.href} class="stat">
+                <span class="stat-num">{s.n}</span>
+                <span class="stat-label">{s.n === 1 ? s.one : s.many}</span>
+              </a>
+            ))}
+          </div>
+        </section>
+        <section class="panel">
+          <h2>Places usage</h2>
+          <p>
+            Places calls this month: {monthUsed} / {monthlyCap}
+          </p>
+          {monthUsed >= monthlyCap * 0.8 && (
+            <p role="alert">Places usage is nearing the monthly cap; discovery and refresh stop once it is reached.</p>
+          )}
+        </section>
+        <section class="panel">
+          <h2>Background jobs</h2>
+          <div class="button-row">
+            <form method="post" action="/admin/jobs/refreshLocations/run">
+              <button type="submit">Run location refresh now</button>
+            </form>
+            <form method="post" action="/admin/jobs/recheckProtocols/run">
+              <button type="submit">Re-check protocols now</button>
+            </form>
+          </div>
+        </section>
       </>,
       200,
       { layout: 'admin', activeNav: 'overview' },

@@ -29,7 +29,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
         <p>
           <a href="/admin/categories/new">New category</a>
         </p>
-        <table>
+        <table class="stack-table t-categories">
           <thead>
             <tr>
               <th>Name</th>
@@ -46,13 +46,13 @@ export function categoriesRoutes(deps: AppDeps): Hono {
                 <td>{cat.slug}</td>
                 <td>{cat.searchTerms.join(', ')}</td>
                 <td>{cat.targetCount}</td>
-                <td>
+                <td class="row-actions">
                   <a href={`/admin/categories/${cat.id}/edit`}>Edit</a>
                   <form method="post" action={`/admin/categories/${cat.id}/discover`}>
-                    <button type="submit">Discover</button>
+                    <button type="submit" class="btn-secondary">Discover</button>
                   </form>
                   <form method="post" action={`/admin/categories/${cat.id}/delete`}>
-                    <button type="submit">Delete</button>
+                    <button type="submit" class="btn-danger">Delete</button>
                   </form>
                 </td>
               </tr>

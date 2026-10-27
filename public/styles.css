@@ -410,3 +410,73 @@ body.admin main { max-width: 1100px; }
 @media (max-width: 339px) { .actions { flex-direction: column; } }
 .details { margin: var(--space-2) 0; }
 .details summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
+
+/* 12. Admin pages ------------------------------------------------------------- */
+/* Overview */
+.setup-card {
+  margin: var(--space-4) 0;
+  padding: var(--space-5);
+  border: 2px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.setup-card h2 { margin-top: 0; }
+.setup-again { margin: var(--space-2) 0; font-size: var(--fs-16); }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); margin: var(--space-4) 0; }
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+.stat:hover { border-color: var(--primary); }
+.stat-num { font-size: var(--fs-28); font-weight: 700; line-height: 1.1; }
+.stat-label { color: var(--muted); }
+.panel { margin: var(--space-4) 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.panel h2 { margin-top: 0; }
+.button-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+
+/* Forms and in-table actions */
+body.admin main input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+body.admin main textarea,
+body.admin main select { width: 100%; max-width: 40rem; }
+body.admin main textarea { min-height: 8rem; font-family: inherit; }
+.row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.row-actions form { margin: 0; }
+.row-actions a { display: inline-flex; align-items: center; }
+.btn-secondary, button.btn-secondary { color: var(--primary); background: transparent; }
+button.btn-danger { color: var(--danger-ink); background: var(--danger); border-color: var(--danger); }
+button.btn-go { color: var(--go-ink); background: var(--go); border-color: var(--go); }
+
+/* Protocol review: draft and sources side by side */
+.review { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.review > section { flex: 1 1 320px; min-width: 0; }
+.review textarea { width: 100%; max-width: none; }
+
+/* Stacked admin tables: header labels come from the column position, so no markup changes are needed. */
+@media (max-width: 640px) {
+  .stack-table td::before { font-weight: 700; color: var(--muted); }
+  .t-categories td:nth-child(1)::before { content: "Name: "; }
+  .t-categories td:nth-child(2)::before { content: "Slug: "; }
+  .t-categories td:nth-child(3)::before { content: "Search terms: "; }
+  .t-categories td:nth-child(4)::before { content: "Target: "; }
+  .t-locations td:nth-child(1)::before { content: "Name: "; }
+  .t-locations td:nth-child(2)::before { content: "Category: "; }
+  .t-locations td:nth-child(3)::before { content: "Distance: "; }
+  .t-locations td:nth-child(4)::before { content: "Phone: "; }
+  .t-versions td:nth-child(1)::before { content: "Version: "; }
+  .t-versions td:nth-child(2)::before { content: "Status: "; }
+  .t-versions td:nth-child(3)::before { content: "Created: "; }
+  .t-versions td:nth-child(4)::before { content: "Reviewed: "; }
+  .t-versions td:nth-child(5)::before { content: "Notes: "; }
+  .t-protocols td:nth-child(1)::before { content: "Title: "; }
+  .t-protocols td:nth-child(2)::before { content: "Slug: "; }
+  .t-protocols td:nth-child(3)::before { content: "Published: "; }
+  .t-protocols td:nth-child(4)::before { content: "Latest: "; }
+  .stack-table td.row-actions { display: flex; }
+}

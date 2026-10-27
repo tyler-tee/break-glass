@@ -96,7 +96,7 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
         {SECTIONS.map(([status, title]) => (
           <section>
             <h2>{title}</h2>
-            <table>
+            <table class="stack-table t-locations">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -115,16 +115,16 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
                       <td>{l.categoryName}</td>
                       <td>{l.distanceMi === null ? '' : `${l.distanceMi.toFixed(1)} mi`}</td>
                       <td>{l.phone}</td>
-                      <td>
+                      <td class="row-actions">
                         <a href={`/admin/locations/${l.id}/edit`}>Edit</a>
                         {canTransition(l.status, 'approved') && (
                           <form method="post" action={`/admin/locations/${l.id}/approve`}>
-                            <button type="submit">Approve</button>
+                            <button type="submit" class="btn-go">Approve</button>
                           </form>
                         )}
                         {canTransition(l.status, 'rejected') && (
                           <form method="post" action={`/admin/locations/${l.id}/reject`}>
-                            <button type="submit">Reject</button>
+                            <button type="submit" class="btn-secondary">Reject</button>
                           </form>
                         )}
                       </td>
