@@ -97,7 +97,8 @@ In the Google Cloud console, also restrict the API key to "Places API (New)" onl
 - Session cookies are HttpOnly, SameSite and signed, but not Secure (that would break plain HTTP). They expire after 12 hours.
 - Sessions are stateless signed cookies, so they cannot be revoked individually. Rotating `SESSION_SECRET` logs everyone out.
 - Website fetches (extraction and protocol sources) are SSRF-guarded against private and loopback addresses, but DNS rebinding is not fully closed.
-- LLM output is validated against a schema and sanitized before it is stored or rendered; nothing is published without admin review.
+- LLM output is validated against a schema and sanitized at render time (markdown is converted to HTML and cleaned before it is shown); nothing is published without admin review.
+- Admin POSTs whose `Origin` (or `Referer`) host differs from the request `Host` are rejected with 403.
 
 ## Operations
 
@@ -126,6 +127,6 @@ In the Google Cloud console, also restrict the API key to "Places API (New)" onl
 ## Troubleshooting
 
 - 403 from Places: the key is invalid, or its API restriction does not include "Places API (New)". Check the key and that the API is enabled for the project.
-- 502 pages in the admin UI: an upstream (Places, Anthropic, or a source website) returned an error; the page shows the upstream error text.
+- 502 pages in the admin UI: an upstream returned an error. Places errors (including timeouts and network failures, shown as status 0) show the upstream error text. A protocol draft that the LLM provider fails (rate limit, 5xx, auth, network) or that fails validation shows "Draft rejected" with an "LLM provider error" message truncated to 200 characters.
 - 429: the Places call cap for the run or the month was reached. Raise `PLACES_CALL_CAP` or `PLACES_MONTHLY_CAP`, or wait for the next month.
 - Container restarts immediately: check `docker compose logs app`; a missing or too-short `SESSION_SECRET` or a missing `ADMIN_PASSWORD_HASH` is reported as "Invalid environment".
