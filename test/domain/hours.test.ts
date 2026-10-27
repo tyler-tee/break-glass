@@ -35,6 +35,18 @@ describe('normalizeHours', () => {
   });
 });
 
+describe('normalizeHours 24/7', () => {
+  it('lone no-close period at Sunday 00:00 means open 24/7', () => {
+    const h = normalizeHours([{ open: { day: 0, hour: 0, minute: 0 } }]);
+    expect(h).not.toBeNull();
+    for (const d of ['0', '1', '2', '3', '4', '5', '6'] as const) {
+      expect(h!.periods[d]).toEqual([{ open: '0000', close: '2400' }]);
+    }
+    // Wed 2026-10-28 15:00 Denver (UTC-6) = 21:00Z
+    expect(isOpenNow(h, new Date('2026-10-28T21:00:00Z'), TZ)).toEqual({ state: 'open', until: '2400' });
+  });
+});
+
 describe('isOpenNow', () => {
   it('null hours → unknown', () =>
     expect(isOpenNow(null, new Date(), TZ).state).toBe('unknown'));

@@ -13,6 +13,15 @@ export function normalizeHours(
   weekdayText: string[] = [],
 ): WeeklyHours | null {
   if (!periods || periods.length === 0) return null;
+  const only = periods.length === 1 ? periods[0] : undefined;
+  if (only && !only.close && only.open.day === 0 && only.open.hour === 0 && only.open.minute === 0) {
+    // Places encodes a 24/7 location as one no-close period at Sunday 00:00.
+    const always = (): Interval[] => [{ open: '0000', close: '2400' }];
+    return {
+      periods: { '0': always(), '1': always(), '2': always(), '3': always(), '4': always(), '5': always(), '6': always() },
+      weekdayText,
+    };
+  }
   const out: WeeklyHours['periods'] = { '0': [], '1': [], '2': [], '3': [], '4': [], '5': [], '6': [] };
   for (const p of periods) {
     const interval: Interval = p.close
