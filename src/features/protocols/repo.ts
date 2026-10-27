@@ -1,4 +1,4 @@
-import { desc, eq, max } from 'drizzle-orm';
+import { and, desc, eq, max } from 'drizzle-orm';
 import type { Db, DbOrTx } from '../../db/client.js';
 import { protocolSources, protocolVersions, protocols } from '../../db/schema.js';
 import type { ProtocolStatus } from '../../domain/types.js';
@@ -96,4 +96,27 @@ export function nextVersionNumber(db: DbOrTx, protocolId: number): number {
     .where(eq(protocolVersions.protocolId, protocolId))
     .get();
   return (row?.v ?? 0) + 1;
+}
+
+export type PublishedProtocol = { protocol: Protocol; version: ProtocolVersion; sources: ProtocolSource[] };
+
+export function getPublished(db: DbOrTx): PublishedProtocol[] {
+  return db
+    .select({ protocol: protocols, version: protocolVersions })
+    .from(protocolVersions)
+    .innerJoin(protocols, eq(protocols.id, protocolVersions.protocolId))
+    .where(eq(protocolVersions.status, 'published'))
+    .orderBy(protocols.title)
+    .all()
+    .map(({ protocol, version }) => ({ protocol, version, sources: listSources(db, version.id) }));
+}
+
+export function getPublishedBySlug(db: DbOrTx, slug: string): PublishedProtocol | null {
+  const row = db
+    .select({ protocol: protocols, version: protocolVersions })
+    .from(protocolVersions)
+    .innerJoin(protocols, eq(protocols.id, protocolVersions.protocolId))
+    .where(and(eq(protocols.slug, slug), eq(protocolVersions.status, 'published')))
+    .get();
+  return row ? { ...row, sources: listSources(db, row.version.id) } : null;
 }

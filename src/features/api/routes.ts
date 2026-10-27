@@ -10,6 +10,7 @@ import {
   type CategoryGroup,
   type LocationView,
 } from '../locations/search.js';
+import { getPublished, getPublishedBySlug, type PublishedProtocol } from '../protocols/repo.js';
 
 export function toApiLocation(v: LocationView) {
   return {
@@ -42,6 +43,16 @@ export function toApiCategory(c: CategoryRow) {
   return { id: c.id, name: c.name, slug: c.slug, searchTerms: c.searchTerms, targetCount: c.targetCount };
 }
 
+const toApiProtocol = ({ protocol, version }: PublishedProtocol) => ({
+  id: protocol.id,
+  slug: protocol.slug,
+  title: protocol.title,
+  tags: protocol.tags ?? [],
+  needsRereview: protocol.needsRereview,
+  rereviewReason: protocol.rereviewReason,
+  version: { number: version.version, publishedAt: version.reviewedAt ? version.reviewedAt.toISOString() : null },
+});
+
 const toApiGroup = (g: CategoryGroup) => ({
   category: { id: g.category.id, name: g.category.name, slug: g.category.slug },
   locations: g.locations.map(toApiLocation),
@@ -72,6 +83,24 @@ export function apiRoutes(deps: AppDeps): Hono {
     const view = Number.isInteger(id) ? getVisibleLocation(db, id, now(), tz()) : null;
     if (!view) return c.json({ error: 'not found' }, 404);
     return c.json({ location: toApiLocation(view) });
+  });
+
+  app.get('/protocols', (c) => c.json({ protocols: getPublished(db).map(toApiProtocol) }));
+
+  app.get('/protocols/:slug', (c) => {
+    const found = getPublishedBySlug(db, c.req.param('slug'));
+    if (!found) return c.json({ error: 'not found' }, 404);
+    return c.json({
+      protocol: {
+        ...toApiProtocol(found),
+        bodyMd: found.version.bodyMd,
+        sources: found.sources.map((s) => ({
+          url: s.url,
+          title: s.title,
+          fetchedAt: s.fetchedAt ? s.fetchedAt.toISOString() : null,
+        })),
+      },
+    });
   });
 
   return app;

@@ -1,9 +1,13 @@
 import { Hono } from 'hono';
+import { raw } from 'hono/html';
 import type { AppDeps } from '../../app.js';
 import { requestClock } from '../clock.js';
 import { LocationCard } from '../../web/components/LocationCard.js';
+import { WarningBadge } from '../../web/components/WarningBadge.js';
+import { renderMarkdown } from '../../web/format.js';
 import { page } from '../../web/Layout.js';
 import { getCategoryBySlug, listCategories } from '../categories/repo.js';
+import { getPublished, getPublishedBySlug } from '../protocols/repo.js';
 import { getVisibleLocation, listVisibleByCategory, searchLocations } from '../locations/search.js';
 
 export function familyRoutes(deps: AppDeps): Hono {
@@ -87,6 +91,65 @@ export function familyRoutes(deps: AppDeps): Hono {
       <>
         <h1>{view.name}</h1>
         <LocationCard location={view} showCategory />
+      </>,
+    );
+  });
+
+  app.get('/emergency', (c) => {
+    const items = getPublished(db);
+    return page(
+      c,
+      'Emergency protocols',
+      <>
+        <h1>Emergency protocols</h1>
+        {items.length === 0 ? (
+          <p>No protocols published yet</p>
+        ) : (
+          items.map(({ protocol }) => (
+            <a class="row protocol-row" href={`/emergency/${protocol.slug}`}>
+              <span>
+                <strong>{protocol.title}</strong>
+                {protocol.tags && protocol.tags.length > 0 ? <small class="muted"> {protocol.tags.join(', ')}</small> : null}
+                {protocol.needsRereview ? (
+                  <WarningBadge kind="warn" summary="Sources changed; under re-review" />
+                ) : null}
+              </span>
+            </a>
+          ))
+        )}
+      </>,
+    );
+  });
+
+  app.get('/emergency/:slug', (c) => {
+    const found = getPublishedBySlug(db, c.req.param('slug'));
+    if (!found) return page(c, 'Not found', <p>Protocol not found</p>, 404);
+    const { protocol, version, sources } = found;
+    const reviewed = version.reviewedAt ? ` · reviewed ${version.reviewedAt.toISOString().slice(0, 10)}` : '';
+    return page(
+      c,
+      protocol.title,
+      <>
+        <h1>{protocol.title}</h1>
+        {protocol.needsRereview ? (
+          <WarningBadge kind="warn" summary={protocol.rereviewReason ?? 'Sources changed; under re-review'} />
+        ) : null}
+        <article class="protocol">{raw(renderMarkdown(version.bodyMd))}</article>
+        <section>
+          <h2>Sources</h2>
+          <ul class="sources">
+            {sources.map((s) => (
+              <li>
+                <a href={s.url}>{s.title ?? s.url}</a>
+                {s.fetchedAt ? <span class="muted"> (fetched {s.fetchedAt.toISOString().slice(0, 10)})</span> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+        <p class="muted">
+          Published v{version.version}
+          {reviewed}
+        </p>
       </>,
     );
   });

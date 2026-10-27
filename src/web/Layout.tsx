@@ -26,6 +26,11 @@ h3 a{display:inline-block;padding:10px 0}
 .badge{display:inline-block;padding:6px 10px;border-radius:6px;font-weight:700}
 .badge-warn{background:#ffd800;color:#111}
 .badge-closed{background:#b00020;color:#fff}
+.protocol-row small{display:block}
+.protocol ol{padding-left:28px;font-size:1.2rem}
+.protocol li{margin:12px 0}
+.sources{padding-left:20px}
+.sources li{margin:4px 0}
 .admin-nav ul{list-style:none;margin:0;padding:0}
 .admin-nav li a{display:inline-block;padding:10px 0}
 .admin-nav button{padding:0 20px}
