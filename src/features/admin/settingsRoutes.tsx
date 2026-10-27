@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import type { AppDeps } from '../../app.js';
-import { AdminNav } from '../../web/components/AdminNav.js';
 import { BudgetExhausted, newPlacesBudget } from '../../services/places/budget.js';
 import { PlacesError, geocode } from '../../services/places/client.js';
 import { placesOf } from '../../services/resolver.js';
@@ -24,7 +23,6 @@ export function settingsRoutes(deps: AppDeps): Hono {
       'Settings',
       <>
         <h1>Settings</h1>
-        <AdminNav />
         {opts.saved && <p role="status">Saved.</p>}
         {opts.error && <p role="alert">{opts.error}</p>}
         <form method="post" action="/admin/settings">
@@ -75,6 +73,7 @@ export function settingsRoutes(deps: AppDeps): Hono {
         </form>
       </>,
       opts.status ?? 200,
+      { layout: 'admin', activeNav: 'settings' },
     );
 
   app.get('/', (c) => formPage(c, getSettings(deps.db), { saved: c.req.query('saved') === '1' }));

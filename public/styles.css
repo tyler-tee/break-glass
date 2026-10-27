@@ -1,7 +1,7 @@
 /* ==========================================================================
    Break Glass design system
    Sections: 1 Font  2 Tokens  3 Base  4 Layout  5 Components  6 Legacy classes
-             7 Responsive tables  8 Utilities  9 Reduced motion
+             7 Responsive tables  8 Utilities  9 Reduced motion  10 Page layouts
    ========================================================================== */
 
 /* 1. Font (self-hosted, no external requests) ------------------------------ */
@@ -277,4 +277,43 @@ th, td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* 10. Page layouts (family / admin / auth) ------------------------------------ */
+.site-header, .admin-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.site-header { max-width: var(--measure); margin: 0 auto; }
+.site-name { font-weight: 700; }
+.site-header a, .admin-bar a { display: inline-flex; align-items: center; font-weight: 600; }
+.admin-bar-actions { display: flex; align-items: center; gap: var(--space-4); }
+.admin-bar-actions form { margin: 0; }
+
+.admin-shell { display: block; }
+.admin-nav ul { list-style: none; margin: 0; padding: 0; }
+.admin-nav li a {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  text-decoration: none;
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+.admin-nav li a[aria-current="page"] { background: var(--primary); color: var(--primary-ink); }
+.admin-menu { padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.admin-menu summary { display: flex; align-items: center; min-height: var(--tap); cursor: pointer; font-weight: 700; }
+.admin-sidebar { display: none; }
+body.admin main { max-width: 1100px; }
+
+@media (min-width: 1024px) {
+  .admin-shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: start; }
+  .admin-nav { position: sticky; top: 0; padding: var(--space-4); }
+  .admin-menu { display: none; }
+  .admin-sidebar { display: block; }
 }

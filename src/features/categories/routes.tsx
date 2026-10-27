@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import type { AppDeps } from '../../app.js';
-import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
 import { budgetExhaustedPage, placesErrorPage } from '../../web/placesErrorPage.js';
 import { BudgetExhausted, newPlacesBudget } from '../../services/places/budget.js';
@@ -26,7 +25,6 @@ export function categoriesRoutes(deps: AppDeps): Hono {
       'Categories',
       <>
         <h1>Categories</h1>
-        <AdminNav />
         {opts.error && <p role="alert">{opts.error}</p>}
         <p>
           <a href="/admin/categories/new">New category</a>
@@ -63,6 +61,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
         </table>
       </>,
       opts.status ?? 200,
+      { layout: 'admin', activeNav: 'categories' },
     );
 
   const formPage = (
@@ -76,7 +75,6 @@ export function categoriesRoutes(deps: AppDeps): Hono {
       'Category',
       <>
         <h1>Category</h1>
-        <AdminNav />
         {opts.error && <p role="alert">{opts.error}</p>}
         <form method="post" action={action}>
           <p>
@@ -104,6 +102,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
         </p>
       </>,
       opts.status ?? 200,
+      { layout: 'admin', activeNav: 'categories' },
     );
 
   const submitted = (body: Record<string, unknown>): FormValues => ({

@@ -1,5 +1,5 @@
-import { sql } from 'drizzle-orm';
-import { Hono } from 'hono';
+import { eq, sql } from 'drizzle-orm';
+import { Hono, type Context } from 'hono';
 import type { Db } from './db/client.js';
 import type { Extractor } from './services/llm/extract.js';
 import type { LlmProvider } from './services/llm/provider.js';
@@ -10,6 +10,11 @@ import { apiRoutes } from './features/api/routes.js';
 import type { SchedulerHandle } from './jobs/scheduler.js';
 import { adminRoutes } from './features/admin/routes.js';
 import { registerAssets } from './web/assets.js';
+import type { LayoutContext, PageChrome } from './web/Layout.js';
+import { notFoundPage, serverErrorPage } from './web/errorPages.js';
+import { readSession } from './features/admin/auth.js';
+import { installState } from './features/admin/install.js';
+import { settings } from './db/schema.js';
 import { createSecretsStore, type SecretsStore } from './features/admin/secrets.js';
 import { makeServiceResolver, type PlacesDep, type ServiceResolver } from './services/resolver.js';
 
@@ -33,6 +38,42 @@ export function createApp(input: AppDeps): Hono {
   input.resolve ??= makeServiceResolver(input.db, input.env, input.secrets);
   const deps = input as ResolvedAppDeps;
   const app = new Hono();
+  const now = deps.now ?? (() => new Date());
+
+  // Lazy per-request layout values (household name, whether Setup is still pending). Read only when a page
+  // renders a layout; page() reads them via readLayoutContext(c). New pages need not pass them.
+  app.use('*', async (c, next) => {
+    let memo: LayoutContext | undefined;
+    c.set('layoutContext', () => {
+      memo ??= {
+        household:
+          deps.db.select({ n: settings.householdName }).from(settings).where(eq(settings.id, 1)).get()?.n?.trim() ||
+          undefined,
+        setupIncomplete: installState(deps) === 'incomplete',
+      };
+      return memo;
+    });
+    await next();
+  });
+
+  // Admin chrome only for an authenticated admin; logged-out visitors get the family layout.
+  const chromeFor = async (c: Context): Promise<PageChrome> => {
+    if (!c.req.path.startsWith('/admin')) return {};
+    try {
+      return (await readSession(c, deps.secrets.getSessionSecret(), now())) ? { layout: 'admin' } : {};
+    } catch {
+      return {};
+    }
+  };
+  app.notFound(async (c) => notFoundPage(c, await chromeFor(c)));
+  app.onError(async (err, c) => {
+    console.error('unhandled error', c.req.method, c.req.path, err);
+    try {
+      return serverErrorPage(c, await chromeFor(c));
+    } catch {
+      return c.text('Something went wrong', 500);
+    }
+  });
   app.get('/health', (c) => {
     try {
       deps.db.run(sql`select 1`);

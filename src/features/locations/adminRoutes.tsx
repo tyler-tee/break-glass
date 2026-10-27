@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import type { AppDeps } from '../../app.js';
 import type { LocationStatus } from '../../domain/types.js';
-import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
 import { ReviewQueue } from '../../web/components/ReviewQueue.js';
 import { getCategoryBySlug, listCategories } from '../categories/repo.js';
@@ -90,7 +89,6 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
       'Locations',
       <>
         <h1>Locations</h1>
-        <AdminNav />
         {opts.error && <p role="alert">{opts.error}</p>}
         <p>
           <a href="/admin/locations/new">New location</a>
@@ -138,6 +136,7 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
         ))}
       </>,
       opts.status ?? 200,
+      { layout: 'admin', activeNav: 'places' },
     );
   };
 
@@ -152,7 +151,6 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
       'Location',
       <>
         <h1>Location</h1>
-        <AdminNav />
         {opts.error && <p role="alert">{opts.error}</p>}
         <form method="post" action={action}>
           <p>
@@ -244,6 +242,7 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
         </p>
       </>,
       opts.status ?? 200,
+      { layout: 'admin', activeNav: 'places' },
     );
 
   app.get('/', (c) => listPage(c));
@@ -332,7 +331,6 @@ export function candidatesRoutes(deps: AppDeps): Hono {
         'Candidates',
         <>
           <h1>Candidates</h1>
-          <AdminNav />
           <ul>
             {listCategories(db).map((cat) => (
               <li>
@@ -341,6 +339,8 @@ export function candidatesRoutes(deps: AppDeps): Hono {
             ))}
           </ul>
         </>,
+        200,
+        { layout: 'admin', activeNav: 'review' },
       );
     }
     const report = reportLine(c.req.query());
@@ -362,7 +362,6 @@ export function candidatesRoutes(deps: AppDeps): Hono {
       'Candidates',
       <>
         <h1>Candidates: {category.name}</h1>
-        <AdminNav />
         {report && <p role="status">{report}</p>}
         <ReviewQueue
           title="Candidates"
@@ -376,6 +375,8 @@ export function candidatesRoutes(deps: AppDeps): Hono {
           <a href="/admin/candidates">All categories</a>
         </p>
       </>,
+      200,
+      { layout: 'admin', activeNav: 'review' },
     );
   });
 
@@ -411,7 +412,6 @@ export function warnRoutes(deps: AppDeps): Hono {
       'Warn queue',
       <>
         <h1>Warn queue</h1>
-        <AdminNav />
         <ReviewQueue
           title="Needs review"
           empty="Nothing needs review."
@@ -422,6 +422,8 @@ export function warnRoutes(deps: AppDeps): Hono {
           returnTo="/admin/warn"
         />
       </>,
+      200,
+      { layout: 'admin', activeNav: 'warnings' },
     );
   });
 

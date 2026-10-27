@@ -4,7 +4,6 @@ import type { AppDeps } from '../../app.js';
 import { slugify } from '../../domain/slug.js';
 import { LlmRefusalError, LlmValidationError } from '../../services/llm/provider.js';
 import { llmOf } from '../../services/resolver.js';
-import { AdminNav } from '../../web/components/AdminNav.js';
 import { WarningBadge } from '../../web/components/WarningBadge.js';
 import { renderMarkdown, safeHref } from '../../web/format.js';
 import { page } from '../../web/Layout.js';
@@ -46,7 +45,6 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
       'New protocol',
       <>
         <h1>New protocol</h1>
-        <AdminNav />
         {error && <p role="alert">{error}</p>}
         <form method="post" action="/admin/protocols/new">
           <p>
@@ -66,6 +64,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         </p>
       </>,
       error ? 400 : 200,
+      { layout: 'admin', activeNav: 'protocols' },
     );
 
   const detailPage = (
@@ -83,7 +82,6 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
       protocol.title,
       <>
         <h1>{protocol.title}</h1>
-        <AdminNav />
         {opts.error && <p role="alert">{opts.error}</p>}
         <h2>Versions</h2>
         <table>
@@ -128,6 +126,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         </p>
       </>,
       opts.status ?? 200,
+      { layout: 'admin', activeNav: 'protocols' },
     );
   };
 
@@ -156,7 +155,6 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         <h1>
           {protocol.title} v{version.version}
         </h1>
-        <AdminNav />
         <p class="badge badge-warn">{version.status}</p>
         {version.reviewNotes && <p>Review notes: {version.reviewNotes}</p>}
         {opts.error && <p role="alert">{opts.error}</p>}
@@ -215,6 +213,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         </p>
       </>,
       opts.status ?? 200,
+      { layout: 'admin', activeNav: 'protocols' },
     );
   };
 
@@ -272,7 +271,6 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
       'Protocols',
       <>
         <h1>Protocols</h1>
-        <AdminNav />
         <p>
           <a href="/admin/protocols/new">New protocol</a>
         </p>
@@ -307,6 +305,8 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
           </tbody>
         </table>
       </>,
+      200,
+      { layout: 'admin', activeNav: 'protocols' },
     ),
   );
 

@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { deleteCookie } from 'hono/cookie';
 import type { ResolvedAppDeps } from '../../app.js';
-import { AdminNav } from '../../web/components/AdminNav.js';
 import { page } from '../../web/Layout.js';
 import { categoriesRoutes } from '../categories/routes.js';
 import { candidatesRoutes, locationsAdminRoutes, warnRoutes } from '../locations/adminRoutes.js';
@@ -37,6 +36,7 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
         </form>
       </>,
       status,
+      { layout: 'auth' },
     );
 
   app.get('/login', (c) => loginPage(c, safeNext(c.req.query('next'))));
@@ -66,7 +66,6 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
       'Admin',
       <>
         <h1>Admin</h1>
-        <AdminNav />
         {job && result && (
           <p role="status">
             {job}: {result}
@@ -85,13 +84,15 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
           <button type="submit">Re-check protocols now</button>
         </form>
       </>,
+      200,
+      { layout: 'admin', activeNav: 'overview' },
     );
   });
 
   app.post('/jobs/:name/run', async (c) => {
     const name = c.req.param('name');
     if (!JOB_NAMES.includes(name as JobName)) return c.notFound();
-    if (!deps.scheduler) return page(c, 'Scheduler not running', <h1>Scheduler not running</h1>, 503);
+    if (!deps.scheduler) return page(c, 'Scheduler not running', <h1>Scheduler not running</h1>, 503, { layout: 'admin', activeNav: 'overview' });
     const result: RunResult = await deps.scheduler.runNow(name as JobName);
     return c.redirect(`/admin?job=${name}&result=${result}`, 302);
   });

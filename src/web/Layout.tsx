@@ -1,61 +1,180 @@
 import type { Context } from 'hono';
 import { html } from 'hono/html';
 import type { Child, FC, PropsWithChildren } from 'hono/jsx';
+import { assetUrl } from './assets.js';
 
-const css = `
-*{box-sizing:border-box}
-body{margin:0;padding:0 16px 32px;font:18px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#111;background:#fff}
-main{max-width:720px;margin:0 auto}
-a{color:#0b3d91}
-a,button,input{min-height:44px}
-h1{font-size:1.5rem;margin:16px 0}
-h2{font-size:1.25rem;margin:24px 0 8px}
-h3{font-size:1.1rem;margin:0 0 4px}
-h3 a{display:inline-block;padding:10px 0}
-.nav a{display:inline-block;padding:10px 0;font-weight:600}
-.search{display:flex;gap:8px;margin:16px 0}
-.search input{flex:1;font-size:1.25rem;padding:12px;border:2px solid #111;border-radius:8px;min-height:56px}
-.search button{font-size:1.1rem;padding:0 20px;border:0;border-radius:8px;background:#0b3d91;color:#fff;min-height:56px}
-.emergency{display:block;padding:14px 16px;margin:16px 0;background:#b00020;color:#fff;font-weight:700;text-align:center;text-decoration:none;border-radius:8px}
-.row{display:flex;align-items:center;width:100%;padding:10px 12px;margin:8px 0;border:1px solid #888;border-radius:8px;text-decoration:none}
-.card{border:1px solid #888;border-radius:8px;padding:12px;margin:12px 0}
-.card p{margin:4px 0}
-.muted{color:#444}
-.hours{margin:4px 0;padding-left:20px}
-.call{display:flex;align-items:center;justify-content:center;width:100%;padding:12px;margin:8px 0;background:#1b7f3b;color:#fff;font-weight:700;text-decoration:none;border-radius:8px}
-.badge{display:inline-block;padding:6px 10px;border-radius:6px;font-weight:700}
-.badge-warn{background:#ffd800;color:#111}
-.badge-closed{background:#b00020;color:#fff}
-.protocol-row small{display:block}
-.protocol ol{padding-left:28px;font-size:1.2rem}
-.protocol li{margin:12px 0}
-.sources{padding-left:20px}
-.sources li{margin:4px 0}
-.admin-nav ul{list-style:none;margin:0;padding:0}
-.admin-nav li a{display:inline-block;padding:10px 0}
-.admin-nav button{padding:0 20px}
-`;
+export type LayoutKind = 'family' | 'admin' | 'auth';
 
-export const Layout: FC<PropsWithChildren<{ title: string }>> = ({ title, children }) => (
+export type AdminNavKey =
+  | 'overview'
+  | 'setup'
+  | 'settings'
+  | 'categories'
+  | 'places'
+  | 'review'
+  | 'warnings'
+  | 'protocols';
+
+export type PageChrome = {
+  layout?: LayoutKind;
+  /** Overrides the household name from settings (rarely needed; the request context supplies it). */
+  household?: string;
+  emergencyNumber?: string;
+  /** Admin layout only: which primary nav item is current. */
+  activeNav?: AdminNavKey;
+};
+
+/**
+ * Per-request values the layouts need that page() cannot get from its arguments. createApp installs a
+ * middleware that sets a lazy getter under this key, so the settings/install-state lookups only run
+ * for pages that actually render a layout. Call sites stay `page(c, title, body, status?, chrome?)`.
+ */
+export type LayoutContext = { household?: string; setupIncomplete?: boolean };
+declare module 'hono' {
+  interface ContextVariableMap {
+    layoutContext: () => LayoutContext;
+  }
+}
+
+const DEFAULT_HOUSEHOLD = 'Our household';
+
+const NAV: { key: AdminNavKey; href: string; label: string }[] = [
+  { key: 'overview', href: '/admin', label: 'Overview' },
+  { key: 'setup', href: '/admin/setup', label: 'Setup' },
+  { key: 'settings', href: '/admin/settings', label: 'Settings' },
+  { key: 'categories', href: '/admin/categories', label: 'Categories' },
+  { key: 'places', href: '/admin/locations', label: 'Places' },
+  { key: 'review', href: '/admin/candidates', label: 'Review queue' },
+  { key: 'warnings', href: '/admin/warn', label: 'Warnings' },
+  { key: 'protocols', href: '/admin/protocols', label: 'Protocols' },
+];
+
+const Head: FC<{ title: string }> = ({ title }) => (
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f5f6e" />
+    <title>{title}</title>
+    <link rel="stylesheet" href={assetUrl('styles.css')} />
+    <link rel="icon" href={assetUrl('favicon.svg')} type="image/svg+xml" />
+    <link rel="manifest" href={assetUrl('manifest.webmanifest')} />
+  </head>
+);
+
+const SkipLink: FC = () => (
+  <a class="skip-link" href="#main">
+    Skip to content
+  </a>
+);
+
+const AdminNavList: FC<{ activeNav?: AdminNavKey; setupIncomplete: boolean }> = ({ activeNav, setupIncomplete }) => (
+  <ul>
+    {NAV.filter((n) => n.key !== 'setup' || setupIncomplete || activeNav === 'setup').map((n) => (
+      <li>
+        <a href={n.href} aria-current={n.key === activeNav ? 'page' : undefined}>
+          {n.label}
+        </a>
+      </li>
+    ))}
+  </ul>
+);
+
+export const FamilyLayout: FC<PropsWithChildren<{ title: string; household: string }>> = ({
+  title,
+  household,
+  children,
+}) => (
   <html lang="en">
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>{title}</title>
-      <style dangerouslySetInnerHTML={{ __html: css }} />
-    </head>
-    <body>
-      <main>
-        <nav class="nav">
-          <a href="/">Home</a>
-        </nav>
-        {children}
-      </main>
+    <Head title={title} />
+    <body class="family">
+      <SkipLink />
+      <header class="site-header">
+        <span class="site-name">{household}</span>
+        <a href="/">Home</a>
+      </header>
+      <main id="main">{children}</main>
     </body>
   </html>
 );
 
-export function page(c: Context, title: string, body: Child, status: 200 | 400 | 401 | 404 | 409 | 429 | 502 | 503 = 200) {
+export const AuthLayout: FC<PropsWithChildren<{ title: string }>> = ({ title, children }) => (
+  <html lang="en">
+    <Head title={title} />
+    <body class="auth">
+      <SkipLink />
+      <header class="site-header">
+        <span class="site-name">Break Glass</span>
+      </header>
+      <main id="main">{children}</main>
+    </body>
+  </html>
+);
+
+export const AdminLayout: FC<
+  PropsWithChildren<{ title: string; activeNav?: AdminNavKey; setupIncomplete: boolean }>
+> = ({ title, activeNav, setupIncomplete, children }) => (
+  <html lang="en">
+    <Head title={title} />
+    <body class="admin">
+      <SkipLink />
+      <header class="admin-bar">
+        <span class="site-name">Break Glass admin</span>
+        <div class="admin-bar-actions">
+          <a href="/">View family site</a>
+          <form method="post" action="/admin/logout">
+            <button type="submit">Log out</button>
+          </form>
+        </div>
+      </header>
+      <div class="admin-shell">
+        <nav class="admin-nav" aria-label="Admin">
+          <details class="admin-menu">
+            <summary>Menu</summary>
+            <AdminNavList activeNav={activeNav} setupIncomplete={setupIncomplete} />
+          </details>
+          <div class="admin-sidebar">
+            <AdminNavList activeNav={activeNav} setupIncomplete={setupIncomplete} />
+          </div>
+        </nav>
+        <main id="main" class="wide">
+          {children}
+        </main>
+      </div>
+      <script src={assetUrl('admin.js')} defer></script>
+    </body>
+  </html>
+);
+
+export function readLayoutContext(c: Context): LayoutContext {
+  try {
+    return c.get('layoutContext')?.() ?? {};
+  } catch (err) {
+    console.error('layout context lookup failed', err);
+    return {};
+  }
+}
+
+export function page(
+  c: Context,
+  title: string,
+  body: Child,
+  status: 200 | 400 | 401 | 404 | 409 | 429 | 500 | 502 | 503 = 200,
+  chrome: PageChrome = {},
+) {
+  const layout = chrome.layout ?? 'family';
+  const ctx = readLayoutContext(c);
   c.status(status);
-  return c.html(html`<!DOCTYPE html>${(<Layout title={title}>{body}</Layout>)}`);
+  const doc =
+    layout === 'admin' ? (
+      <AdminLayout title={title} activeNav={chrome.activeNav} setupIncomplete={ctx.setupIncomplete === true}>
+        {body}
+      </AdminLayout>
+    ) : layout === 'auth' ? (
+      <AuthLayout title={title}>{body}</AuthLayout>
+    ) : (
+      <FamilyLayout title={title} household={chrome.household ?? ctx.household ?? DEFAULT_HOUSEHOLD}>
+        {body}
+      </FamilyLayout>
+    );
+  return c.html(html`<!DOCTYPE html>${doc}`);
 }
