@@ -105,6 +105,15 @@ describe('diffTracked', () => {
     expect(diffTracked(base({ hours: hours(['a']) }), base({ hours: hours(['b']) }))).toEqual([]);
   });
 
+  it('hours key order does not register as a change', () => {
+    const prev = base();
+    const reordered = {
+      weekdayText: [],
+      periods: Object.fromEntries(Object.entries(prev.hours!.periods).reverse()) as WeeklyHours['periods'],
+    };
+    expect(diffTracked(prev, { ...prev, hours: reordered })).toEqual([]);
+  });
+
   it('reports changes in fixed key order as strings', () => {
     const prev = base();
     const next = base({ phone: '8015550199', rating: 4.5, walkIns: true, website: null });
@@ -152,6 +161,16 @@ describe('decideTransition', () => {
 
   it('ratingCount-only change does not warn', () => {
     const changes = [{ field: 'ratingCount', oldValue: '1', newValue: '50' }] as FieldChange[];
+    expect(decide({ changes }).status).toBe('approved');
+  });
+
+  it('rating change of exactly the delta warns', () => {
+    const changes = [{ field: 'rating', oldValue: '1.8', newValue: '2.3' }] as FieldChange[];
+    expect(decide({ changes }).status).toBe('warn');
+  });
+
+  it('rating change just under the delta does not warn', () => {
+    const changes = [{ field: 'rating', oldValue: '4.0', newValue: '4.4' }] as FieldChange[];
     expect(decide({ changes }).status).toBe('approved');
   });
 

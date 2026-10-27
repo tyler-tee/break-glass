@@ -117,7 +117,7 @@ function phoneKey(phone: string | null): string | null {
 
 function comparable(key: keyof TrackedFields, t: TrackedFields): string | null {
   if (key === 'phone') return phoneKey(t.phone);
-  if (key === 'hours') return t.hours ? JSON.stringify(t.hours.periods) : null;
+  if (key === 'hours') return t.hours ? JSON.stringify(stable(t.hours.periods)) : null;
   const v = t[key];
   return v === null ? null : String(v);
 }
@@ -160,7 +160,9 @@ function isWarnworthy(c: FieldChange, ratingWarnDelta: number): boolean {
   if (c.field === 'ratingCount') return false;
   if (c.field !== 'rating') return true;
   if (c.oldValue === null || c.newValue === null) return true;
-  return Math.abs(Number(c.newValue) - Number(c.oldValue)) >= ratingWarnDelta;
+  // Compare in integer tenths: 2.3 - 1.8 is 0.4999999999999998 in floating point.
+  const tenths = Math.round(Math.abs(Number(c.newValue) - Number(c.oldValue)) * 10);
+  return tenths >= Math.round(ratingWarnDelta * 10);
 }
 
 export function decideTransition(input: TransitionInput): TransitionResult {
