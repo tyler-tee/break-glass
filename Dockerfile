@@ -2,7 +2,8 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# better-sqlite3 ships prebuilt binaries; newer npm ignores its gypfile:false and tries node-gyp.
+RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build
 
@@ -11,7 +12,7 @@ FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
 # SQLite in WAL mode needs write access to the whole directory, not just the file.
