@@ -361,6 +361,15 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         const reason = e instanceof LlmRefusalError ? e.message : e.message.split(': ')[0];
         return detailPage(c, id, { error: `Draft rejected: ${reason}`, status: 502, urls });
       }
+      if (e instanceof Error) {
+        // Provider failures (rate limit, 5xx, auth, network). The SDK never echoes the key in messages.
+        console.error(`LLM draft failed for protocol ${id}: ${e.message}`);
+        return detailPage(c, id, {
+          error: `Draft rejected: LLM provider error: ${e.message.slice(0, 200)}`,
+          status: 502,
+          urls,
+        });
+      }
       throw e;
     }
     return c.redirect(`/admin/protocols/${id}`, 302);

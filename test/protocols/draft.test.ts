@@ -240,6 +240,23 @@ describe('protocol admin routes', () => {
     expect(await res.text()).toContain('Set LLM_PROVIDER and LLM_API_KEY to enable drafting');
   });
 
+  it('draft route maps provider errors to 502', async () => {
+    const llm: LlmProvider = {
+      generateJson: async () => {
+        throw new Error('connection reset');
+      },
+    };
+    const app = await makeApp(llm);
+    const cookie = await adminLogin(app, 'correct horse');
+    const p = choking();
+    const res = await app.request(`/admin/protocols/${p.id}/draft`, form(cookie, { source_urls: RC }));
+    expect(res.status).toBe(502);
+    const html = await res.text();
+    expect(html).toContain('Draft rejected');
+    expect(html).toContain('LLM provider error: connection reset');
+    expect(counts()).toEqual({ versions: 0, sources: 0 });
+  });
+
   it('draft route maps LlmValidationError to 502', async () => {
     const llm: LlmProvider = {
       generateJson: async () => {
