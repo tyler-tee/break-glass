@@ -1,12 +1,15 @@
 import path from 'node:path';
+import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
 import type { Db } from '../../src/db/client.js';
+import { protocolSources } from '../../src/db/schema.js';
 import { loadEnv } from '../../src/env.js';
 import { hashPassword } from '../../src/features/admin/auth.js';
 import {
   createProtocol,
   getProtocol,
+  getPublished,
   insertSources,
   insertVersion,
   listSources,
@@ -33,11 +36,11 @@ beforeEach(() => {
 });
 
 const log = () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() });
-const run = (over: { fail?: string[] } = {}) =>
+const run = (over: { fail?: string[]; log?: ReturnType<typeof log> } = {}) =>
   recheckProtocols(db, {
     fetch: fakeSiteFetch(WEB_DIR, over.fail ? { fail: over.fail } : {}),
     now: () => NOW,
-    log: log(),
+    log: over.log ?? log(),
     lookup: publicLookup,
   });
 
@@ -76,10 +79,52 @@ describe('recheckProtocols', () => {
 
   it('fetch failure does not flag', async () => {
     const { p } = await seed({ staleNhs: true });
-    const report = await run({ fail: [NHS] });
+    const l = log();
+    const report = await run({ fail: [NHS], log: l });
     expect(getProtocol(db, p.id)!.needsRereview).toBe(false);
-    expect(report.flagged).toBe(0);
-    expect(report.failed).toBe(1);
+    expect(report).toEqual({ checked: 1, flagged: 0, unchanged: 0, failed: 1 });
+    expect(l.warn.mock.calls.filter(([m]) => String(m).startsWith('Re-check could not fetch'))).toHaveLength(1);
+  });
+
+  it('counters reconcile', async () => {
+    await seed({ slug: 'a', title: 'A unchanged' });
+    await seed({ staleNhs: true, slug: 'b', title: 'B flagged' });
+    const { v } = await seed({ slug: 'c', title: 'C failing' });
+    // Give C's nhs source a distinct URL so only it fails (hash stays valid for the other source).
+    const nhs = listSources(db, v.id).find((s) => s.url === NHS)!;
+    db.update(protocolSources).set({ url: `${NHS}?c=1` }).where(eq(protocolSources.id, nhs.id)).run();
+    const base = fakeSiteFetch(WEB_DIR);
+    const fetchFn = ((url: string, init?: RequestInit) =>
+      url.includes('?c=1') ? Promise.resolve(new Response('nope', { status: 500 })) : base(url, init)) as typeof fetch;
+    const report = await recheckProtocols(db, { fetch: fetchFn, now: () => NOW, log: log(), lookup: publicLookup });
+    expect(report).toEqual({ checked: 3, flagged: 1, unchanged: 1, failed: 1 });
+  });
+
+  it('an exception in one protocol does not abort the loop', async () => {
+    // fetchPage swallows fetch errors, so make log.warn throw for one URL: fetchPage's own catch handler
+    // calls log.warn, so the error escapes fetchPage and exercises the per-protocol catch.
+    const { p: bad } = await seed({ slug: 'bad', title: 'A bad' });
+    const { p: ok } = await seed({ staleNhs: true, slug: 'ok', title: 'B ok' });
+    const badVersion = getPublished(db).find((x) => x.protocol.id === bad.id)!.version.id;
+    const badSource = listSources(db, badVersion)[0]!;
+    db.update(protocolSources).set({ url: 'https://redcross.example/gone' }).where(eq(protocolSources.id, badSource.id)).run();
+    const l = log();
+    l.warn.mockImplementation((m: string) => {
+      if (String(m).includes('redcross.example/gone')) throw new Error('boom');
+    });
+    const report = await recheckProtocols(db, { fetch: fakeSiteFetch(WEB_DIR), now: () => NOW, log: l, lookup: publicLookup });
+    expect(report).toEqual({ checked: 2, flagged: 1, unchanged: 0, failed: 1 });
+    expect(getProtocol(db, ok.id)!.needsRereview).toBe(true);
+    expect(l.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-running on an already flagged protocol does not double-prefix the reason', async () => {
+    const { p } = await seed({ staleNhs: true });
+    await run();
+    const first = getProtocol(db, p.id)!.rereviewReason;
+    await run();
+    expect(getProtocol(db, p.id)!.rereviewReason).toBe(first);
+    expect(first!.match(/Source changed:/g)).toHaveLength(1);
   });
 
   it('stored hashes are never overwritten', async () => {

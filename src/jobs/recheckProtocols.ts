@@ -14,8 +14,10 @@ export async function recheckProtocols(
   const report: RecheckReport = { checked: 0, flagged: 0, unchanged: 0, failed: 0 };
 
   for (const { protocol, sources } of getPublished(db)) {
+    report.checked++;
     try {
       const changed: string[] = [];
+      let sourcesFailed = 0;
       for (const source of sources) {
         const page = await fetchPage(source.url, {
           fetch: deps.fetch,
@@ -23,25 +25,26 @@ export async function recheckProtocols(
           ...(deps.lookup ? { lookup: deps.lookup } : {}),
         });
         if (!page) {
-          report.failed++;
+          sourcesFailed++;
           log.warn(`Re-check could not fetch ${source.url} for protocol ${protocol.slug}`);
           continue;
         }
         if (hashSourceText(page.text) !== source.contentHash) changed.push(source.url);
       }
-      report.checked++;
       if (changed.length > 0) {
         updateProtocolReview(db, protocol.id, {
           needsRereview: true,
           rereviewReason: 'Source changed: ' + changed.join(', '),
         });
         report.flagged++;
-      } else {
+      } else if (sourcesFailed === 0) {
         report.unchanged++;
+      } else {
+        report.failed++;
       }
     } catch (e) {
       log.error(`Re-check failed for protocol ${protocol.id}: ${e instanceof Error ? e.message : String(e)}`);
-      report.checked++;
+      report.failed++;
     }
   }
   return report;
