@@ -70,3 +70,9 @@ it('zero threshold is rejected', () => {
   expect(() => loadEnv({ ...base, RATING_WARN_DELTA: '-1' })).toThrow(/RATING_WARN_DELTA/);
   expect(loadEnv({ ...base, RATING_WARN_DELTA: '0' }).RATING_WARN_DELTA).toBe(0);
 });
+
+it('.env.example copied verbatim leaves LLM_PROVIDER unset, so a key saved in the app turns drafting on', () => {
+  const example = parseDotEnv(fs.readFileSync(path.resolve(import.meta.dirname, '../.env.example'), 'utf8'));
+  expect(example['LLM_PROVIDER']).toBeUndefined();
+  expect(loadEnv(example).LLM_PROVIDER).toBeUndefined();
+});

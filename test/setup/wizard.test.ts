@@ -318,7 +318,7 @@ describe('wizard routes', () => {
       const html = await (await get('/admin/setup/services')).text();
       expect(html).toContain('Set by the server environment');
       expect(html).not.toContain('name="places_key"');
-      expect(html).not.toContain('value="places"'); // no Remove/Test buttons for it
+      expect(html).not.toMatch(/name="remove" value="places"/); // no Remove button for it (Test is allowed)
       expect(html).not.toContain('AIzaSyENV');
       expect(html).not.toContain('7777');
       expect(html).toContain('name="anthropic_key"');

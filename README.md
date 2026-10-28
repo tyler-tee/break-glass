@@ -53,7 +53,7 @@ Anything set in the environment wins over a value saved in the app, and the app 
 
 - `ADMIN_PASSWORD_HASH`: claim the install without the setup code. Generate it with `npm run hash-password -- '<password>'` (run `npm install` once first; this can be your laptop). Without Node on the host, build the image and hash inside it: `docker compose run --rm --no-deps app node -e "import('./dist/features/admin/auth.js').then(m=>m.hashPassword(process.argv[1])).then(console.log)" '<password>'` (untested here, since Docker was unavailable when this was written).
 - `SESSION_SECRET`: at least 32 characters (`openssl rand -hex 32`). Generated automatically and stored in the database if absent.
-- Optionally `GOOGLE_PLACES_API_KEY`, and `LLM_PROVIDER=anthropic` with `LLM_API_KEY`.
+- Optionally `GOOGLE_PLACES_API_KEY` and `LLM_API_KEY`. Drafting and extraction turn on whenever an Anthropic key exists (here or saved in the app); `LLM_PROVIDER=none` forces them off.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -62,7 +62,7 @@ Anything set in the environment wins over a value saved in the app, and the app 
 | `ADMIN_PASSWORD_HASH` | unset | Output of `npm run hash-password`. Optional. |
 | `SESSION_SECRET` | generated | At least 32 characters; signs session cookies. Optional. |
 | `GOOGLE_PLACES_API_KEY` | unset | Enables geocoding, discovery and location refresh. |
-| `LLM_PROVIDER` | `none` | `anthropic` or `none`. |
+| `LLM_PROVIDER` | auto (on when a key exists) | Unset: on when an Anthropic key is set here or saved in the app. `none`: drafting and extraction stay off even with a saved key. `anthropic`: on, but still needs a key. |
 | `LLM_API_KEY` | unset | Anthropic API key. |
 | `LLM_EXTRACT_MODEL` | `claude-haiku-5-5` | Model for website extraction. |
 | `LLM_DRAFT_MODEL` | `claude-opus-5-5` | Model for protocol drafting. |

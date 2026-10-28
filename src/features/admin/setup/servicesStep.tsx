@@ -1,7 +1,7 @@
 import type { Hono, Context } from 'hono';
 import type { Child } from 'hono/jsx';
 import { testAnthropicKey, testPlacesKey, type ProbeResult } from '../../../services/keyProbe.js';
-import { placesOf } from '../../../services/resolver.js';
+import { LLM_OFF_BY_ENV, llmOffByEnv, placesOf } from '../../../services/resolver.js';
 import type { SecretName } from '../secrets.js';
 import { StepShell, type Notice } from './StepShell.js';
 import { nextStep, stepPath } from './steps.js';
@@ -89,6 +89,7 @@ export function registerServicesStep(app: Hono, ctx: SetupContext): void {
     const errors = opts.errors ?? {};
     const focus = firstError(errors, KEY_NAMES.map((k) => KEYS[k].field));
     const next = nextStep('services');
+    const llmOff = llmOffByEnv(env);
     return render(
       c,
       'services',
@@ -141,6 +142,13 @@ export function registerServicesStep(app: Hono, ctx: SetupContext): void {
                       : 'Not set'}
                 </strong>
               </p>
+              {k === 'anthropic' && llmOff && (
+                <p class="notice notice-status" role="status">
+                  {state.kind === 'none'
+                    ? `${LLM_OFF_BY_ENV}, so a key saved here will not be used.`
+                    : `${LLM_OFF_BY_ENV}; the key is ${state.kind === 'env' ? 'set' : 'saved'} but unused.`}
+                </p>
+              )}
               {state.kind !== 'env' && (
                 <Field
                   id={def.field}
@@ -161,20 +169,24 @@ export function registerServicesStep(app: Hono, ctx: SetupContext): void {
                     />
                   )} />
               )}
-              {state.kind === 'saved' && (
+              {state.kind !== 'none' && (
                 <div class="button-row">
                   <button type="submit" form="svc-aux" name="test" value={k} class="btn-secondary">
-                    Test saved key
+                    {state.kind === 'env' ? 'Test key' : 'Test saved key'}
                   </button>
-                  <button type="submit" form="svc-aux" name="remove" value={k} class="btn-danger">
-                    Remove key
-                  </button>
+                  {/* An env-provided key can be tested (the probe uses the effective key) but not removed. */}
+                  {state.kind === 'saved' && (
+                    <button type="submit" form="svc-aux" name="remove" value={k} class="btn-danger">
+                      Remove key
+                    </button>
+                  )}
                 </div>
               )}
               {probe &&
                 (probe.ok ? (
                   <p class="notice notice-status" role="status">
-                    The saved key works.
+                    {state.kind === 'env' ? 'The key works.' : 'The saved key works.'}
+                    {k === 'anthropic' && llmOff && ` ${LLM_OFF_BY_ENV}, so it is unused for now.`}
                   </p>
                 ) : (
                   <p class="notice notice-alert" role="alert">

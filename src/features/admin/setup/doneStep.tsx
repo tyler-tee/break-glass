@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { Hono } from 'hono';
 import { settings } from '../../../db/schema.js';
-import { llmOf, placesOf } from '../../../services/resolver.js';
+import { LLM_OFF_BY_ENV, llmOf, llmOffByEnv, placesOf } from '../../../services/resolver.js';
 import { StepShell } from './StepShell.js';
 import { goOf, type SetupContext } from './shared.js';
 import { prevStep, stepDone, stepPath, type Step } from './steps.js';
@@ -20,9 +20,14 @@ export function registerDoneStep(app: Hono, ctx: SetupContext): void {
   const { deps, db, render, doneSteps, now } = ctx;
 
   app.get('/done', (c) => {
+    // A saved Anthropic key counts as added even when LLM_PROVIDER=none keeps it unused; the row says so.
+    const anthropicKey = deps.secrets.getAnthropicKey() !== undefined;
+    const servicesDone = llmOf(deps) !== undefined || placesOf(deps) !== undefined || anthropicKey;
+    const servicesNote = anthropicKey && llmOffByEnv(deps.env) ? `${LLM_OFF_BY_ENV}; the Anthropic key is unused.` : undefined;
     const rows = CHECKLIST.map((r) => ({
       ...r,
-      done: r.step === 'services' ? llmOf(deps) !== undefined || placesOf(deps) !== undefined : stepDone({ db }, r.step),
+      done: r.step === 'services' ? servicesDone : stepDone({ db }, r.step),
+      note: r.step === 'services' ? servicesNote : undefined,
     }));
     const open = rows.filter((r) => !r.done && !r.optional);
     return render(
@@ -48,7 +53,8 @@ export function registerDoneStep(app: Hono, ctx: SetupContext): void {
               {rows.map((r) => (
                 <li>
                   <span aria-hidden="true">{r.done ? '✓' : '○'}</span> {r.label}:{' '}
-                  {r.done ? 'done' : r.optional ? 'not added' : 'not done yet'}{' '}
+                  {r.done ? 'done' : r.optional ? 'not added' : 'not done yet'}
+                  {r.note && `. ${r.note}`}{' '}
                   {!r.done && <a href={stepPath(r.step)}>{r.optional ? 'Add' : 'Fix this'}</a>}
                 </li>
               ))}

@@ -1,6 +1,6 @@
 import type { Context, Hono } from 'hono';
 import { slugify } from '../../../domain/slug.js';
-import { llmOf } from '../../../services/resolver.js';
+import { LLM_OFF_BY_ENV, llmOf, llmOffByEnv } from '../../../services/resolver.js';
 import { createProtocol, getProtocol, getProtocolBySlug, getPublished, listProtocols } from '../../protocols/repo.js';
 import { createManualDraft, runDraft } from '../../protocols/service.js';
 import { StepShell } from './StepShell.js';
@@ -122,8 +122,14 @@ export function registerProtocolStep(app: Hono, ctx: SetupContext): void {
                   <p>Paste web pages (one per line) and we will draft a protocol from them. You review it before it is published.</p>
                 ) : (
                   <p class="muted" id="no-llm-note" role={noLlmAlert ? 'alert' : undefined}>
-                    Add an Anthropic key in <a href="/admin/setup/services">Setup → Services</a> to draft protocols from sources — or
-                    write one yourself.
+                    {llmOffByEnv(deps.env) ? (
+                      `${LLM_OFF_BY_ENV}.`
+                    ) : (
+                      <>
+                        Add an Anthropic key in <a href="/admin/setup/services">Setup → Services</a> to draft protocols from
+                        sources — or write one yourself.
+                      </>
+                    )}
                   </p>
                 )}
                 <Field

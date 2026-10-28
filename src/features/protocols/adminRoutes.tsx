@@ -3,7 +3,7 @@ import { raw } from 'hono/html';
 import type { Child } from 'hono/jsx';
 import type { AppDeps } from '../../app.js';
 import { slugify } from '../../domain/slug.js';
-import { llmOf } from '../../services/resolver.js';
+import { LLM_OFF_BY_ENV, llmOf, llmOffByEnv } from '../../services/resolver.js';
 import { WarningBadge } from '../../web/components/WarningBadge.js';
 import { renderMarkdown, safeHref } from '../../web/format.js';
 import { page } from '../../web/Layout.js';
@@ -138,7 +138,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         <h2>Generate draft</h2>
         {!hasLlm && (
           <p class="muted" id="no-llm-note" role={opts.noLlmAlert ? 'alert' : undefined}>
-            {NO_LLM}
+            {llmOffByEnv(deps.env) ? `${LLM_OFF_BY_ENV}.` : NO_LLM}
           </p>
         )}
         {allowlist.length > 0 && <p class="muted">Allowed source hosts: {allowlist.join(', ')}</p>}

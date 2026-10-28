@@ -8,6 +8,11 @@ import type { LlmProvider } from './llm/provider.js';
 
 export type PlacesDep = { fetch: typeof fetch; apiKey: string };
 
+/** LLM_PROVIDER=none in the environment forces drafting and extraction off, even with a saved Anthropic key. */
+export const llmOffByEnv = (env: Pick<Env, 'LLM_PROVIDER'>): boolean => env.LLM_PROVIDER === 'none';
+/** What the admin pages say when llmOffByEnv is true (no trailing punctuation, so callers can extend it). */
+export const LLM_OFF_BY_ENV = 'Drafting is turned off by LLM_PROVIDER=none in the server environment';
+
 /** Builds places/llm/extract from the current effective keys, so a key saved at runtime is used on the next call. */
 export type ServiceResolver = {
   places(): PlacesDep | undefined;
