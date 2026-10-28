@@ -3,7 +3,8 @@ import { deleteCookie } from 'hono/cookie';
 import type { ResolvedAppDeps } from '../../app.js';
 import { page } from '../../web/Layout.js';
 import { categoriesRoutes } from '../categories/routes.js';
-import { candidatesRoutes, locationsAdminRoutes, warnRoutes } from '../locations/adminRoutes.js';
+import { locationsAdminRoutes, warnRoutes } from '../locations/adminRoutes.js';
+import { findPlacesRoutes } from '../locations/findRoutes.js';
 import { protocolsAdminRoutes } from '../protocols/adminRoutes.js';
 import { installState } from './install.js';
 import { listLocations } from '../locations/repo.js';
@@ -86,7 +87,7 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
     const needsRereview = listProtocols(deps.db).filter((p) => p.needsRereview).length;
     const stats: { key: string; href: string; n: number; one: string; many: string }[] = [
       { key: 'approved', href: '/admin/locations', n: count('approved'), one: 'approved place', many: 'approved places' },
-      { key: 'candidates', href: '/admin/candidates', n: count('candidate'), one: 'candidate awaiting review', many: 'candidates awaiting review' },
+      { key: 'candidates', href: '/admin/places/find', n: count('candidate'), one: 'candidate awaiting review', many: 'candidates awaiting review' },
       { key: 'warnings', href: '/admin/warn', n: count('warn'), one: 'warning', many: 'warnings' },
       { key: 'published', href: '/admin/protocols', n: getPublished(deps.db).length, one: 'published protocol', many: 'published protocols' },
       { key: 'rereview', href: '/admin/protocols', n: needsRereview, one: 'protocol needing re-review', many: 'protocols needing re-review' },
@@ -167,7 +168,9 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
   app.route('/settings', settingsRoutes(deps));
   app.route('/categories', categoriesRoutes(deps));
   app.route('/locations', locationsAdminRoutes(deps));
-  app.route('/candidates', candidatesRoutes(deps));
+  app.route('/places/find', findPlacesRoutes(deps));
+  // The old review queue: Find places replaced it.
+  app.get('/candidates', (c) => c.redirect('/admin/places/find', 302));
   app.route('/warn', warnRoutes(deps));
   app.route('/protocols', protocolsAdminRoutes(deps));
 

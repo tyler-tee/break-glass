@@ -11,7 +11,7 @@ export type AdminNavKey =
   | 'settings'
   | 'categories'
   | 'places'
-  | 'review'
+  | 'find'
   | 'warnings'
   | 'protocols';
 
@@ -24,6 +24,8 @@ export type PageChrome = {
   activeNav?: AdminNavKey;
   /** Family layout only: class on <main> (the home screen uses wider gaps). */
   mainClass?: string;
+  /** Admin layout only: extra elements for <head>, e.g. a meta refresh while a find run is going. */
+  head?: Child;
 };
 
 /**
@@ -31,7 +33,12 @@ export type PageChrome = {
  * middleware that sets a lazy getter under this key, so the settings/install-state lookups only run
  * for pages that actually render a layout. Call sites stay `page(c, title, body, status?, chrome?)`.
  */
-export type LayoutContext = { household?: string; setupIncomplete?: boolean };
+export type LayoutContext = {
+  household?: string;
+  setupIncomplete?: boolean;
+  /** Places waiting for re-approval, for the Warnings nav badge. */
+  warnCount?: number;
+};
 declare module 'hono' {
   interface ContextVariableMap {
     layoutContext: () => LayoutContext;
@@ -40,31 +47,28 @@ declare module 'hono' {
 
 const DEFAULT_HOUSEHOLD = 'Our household';
 
+// Order follows the approved Find places mockup; Setup shows only while the install is incomplete.
 const NAV: { key: AdminNavKey; href: string; label: string }[] = [
   { key: 'overview', href: '/admin', label: 'Overview' },
   { key: 'setup', href: '/admin/setup', label: 'Setup' },
-  { key: 'settings', href: '/admin/settings', label: 'Settings' },
+  { key: 'find', href: '/admin/places/find', label: 'Find places' },
   { key: 'categories', href: '/admin/categories', label: 'Categories' },
-  { key: 'places', href: '/admin/locations', label: 'Places' },
-  { key: 'review', href: '/admin/candidates', label: 'Review queue' },
+  { key: 'places', href: '/admin/locations', label: 'All places' },
   { key: 'warnings', href: '/admin/warn', label: 'Warnings' },
   { key: 'protocols', href: '/admin/protocols', label: 'Protocols' },
+  { key: 'settings', href: '/admin/settings', label: 'Settings' },
 ];
 
-const Head: FC<{ title: string; family?: boolean }> = ({ title, family }) => (
+// Admin and family pages share one light visual system (Public Sans on a warm background); no dark mode.
+const Head: FC<{ title: string; family?: boolean; extra?: Child }> = ({ title, family, extra }) => (
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content={family ? '#f6f5f1' : '#0f5f6e'} />
+    <meta name="theme-color" content="#f6f5f1" />
+    {extra}
     <title>{title}</title>
-    {family ? (
-      <>
-        <link rel="preload" href={assetUrl('public-sans-latin.woff2')} as="font" type="font/woff2" crossorigin="anonymous" />
-        <link rel="stylesheet" href={assetUrl('family.css')} />
-      </>
-    ) : (
-      <link rel="stylesheet" href={assetUrl('styles.css')} />
-    )}
+    <link rel="preload" href={assetUrl('public-sans-latin.woff2')} as="font" type="font/woff2" crossorigin="anonymous" />
+    <link rel="stylesheet" href={assetUrl(family ? 'family.css' : 'styles.css')} />
     <link rel="icon" href={assetUrl('favicon.svg')} type="image/svg+xml" />
     <link rel="manifest" href={assetUrl('manifest.webmanifest')} />
   </head>
@@ -76,12 +80,22 @@ const SkipLink: FC = () => (
   </a>
 );
 
-const AdminNavList: FC<{ activeNav?: AdminNavKey; setupIncomplete: boolean }> = ({ activeNav, setupIncomplete }) => (
+const AdminNavList: FC<{ activeNav?: AdminNavKey; setupIncomplete: boolean; warnCount: number }> = ({
+  activeNav,
+  setupIncomplete,
+  warnCount,
+}) => (
   <ul>
     {NAV.filter((n) => n.key !== 'setup' || setupIncomplete || activeNav === 'setup').map((n) => (
       <li>
         <a href={n.href} aria-current={n.key === activeNav ? 'page' : undefined}>
-          {n.label}
+          <span>{n.label}</span>
+          {n.key === 'warnings' && warnCount > 0 && (
+            <span class="nav-count">
+              {warnCount}
+              <span class="sr-only"> to review</span>
+            </span>
+          )}
         </a>
       </li>
     ))}
@@ -119,18 +133,22 @@ export const AuthLayout: FC<PropsWithChildren<{ title: string }>> = ({ title, ch
 );
 
 export const AdminLayout: FC<
-  PropsWithChildren<{ title: string; activeNav?: AdminNavKey; setupIncomplete: boolean }>
-> = ({ title, activeNav, setupIncomplete, children }) => (
+  PropsWithChildren<{ title: string; activeNav?: AdminNavKey; setupIncomplete: boolean; warnCount?: number; head?: Child }>
+> = ({ title, activeNav, setupIncomplete, warnCount = 0, head, children }) => (
   <html lang="en">
-    <Head title={title} />
+    <Head title={title} extra={head} />
     <body class="admin">
       <SkipLink />
       <header class="admin-bar">
-        <span class="site-name">Break Glass admin</span>
+        <span class="site-name">
+          Break Glass <span>admin</span>
+        </span>
         <div class="admin-bar-actions">
-          <a href="/">View family site</a>
+          <a href="/">Family site</a>
           <form method="post" action="/admin/logout">
-            <button type="submit">Log out</button>
+            <button type="submit" class="btn-link">
+              Log out
+            </button>
           </form>
         </div>
       </header>
@@ -138,10 +156,10 @@ export const AdminLayout: FC<
         <nav class="admin-nav" aria-label="Admin">
           <details class="admin-menu">
             <summary>Menu</summary>
-            <AdminNavList activeNav={activeNav} setupIncomplete={setupIncomplete} />
+            <AdminNavList activeNav={activeNav} setupIncomplete={setupIncomplete} warnCount={warnCount} />
           </details>
           <div class="admin-sidebar">
-            <AdminNavList activeNav={activeNav} setupIncomplete={setupIncomplete} />
+            <AdminNavList activeNav={activeNav} setupIncomplete={setupIncomplete} warnCount={warnCount} />
           </div>
         </nav>
         <main id="main" class="wide">
@@ -178,7 +196,13 @@ export function page(
   c.status(status);
   const doc =
     layout === 'admin' ? (
-      <AdminLayout title={title} activeNav={chrome.activeNav} setupIncomplete={ctx.setupIncomplete === true}>
+      <AdminLayout
+        title={title}
+        activeNav={chrome.activeNav}
+        setupIncomplete={ctx.setupIncomplete === true}
+        warnCount={ctx.warnCount ?? 0}
+        head={chrome.head}
+      >
         {body}
       </AdminLayout>
     ) : layout === 'auth' ? (

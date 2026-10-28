@@ -3,7 +3,7 @@ import type { AppDeps } from '../../app.js';
 import type { LocationStatus } from '../../domain/types.js';
 import { page } from '../../web/Layout.js';
 import { ReviewQueue } from '../../web/components/ReviewQueue.js';
-import { getCategoryBySlug, listCategories } from '../categories/repo.js';
+import { listCategories } from '../categories/repo.js';
 import { getLocation, listLocations, listOpenChanges } from './repo.js';
 import {
   LocationError,
@@ -21,14 +21,6 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number | null => (str(v).trim() === '' ? null : Number(str(v)));
 const tri = (v: unknown): boolean | null => (str(v) === 'yes' ? true : str(v) === 'no' ? false : null);
 const triValue = (v: boolean | null | undefined): string => (v === true ? 'yes' : v === false ? 'no' : '');
-
-const reportLine = (q: Record<string, string>): string | null => {
-  if (q['inserted'] === undefined) return null;
-  const stopped = q['stopped']
-    ? ` (stopped early: ${q['stopped'] === 'month' ? 'monthly' : 'per-run'} call cap reached)`
-    : '';
-  return `Discovery: inserted ${q['inserted']}, skipped ${q['skipped'] ?? '0'}, calls ${q['calls'] ?? '0'}${stopped}`;
-};
 
 /** Accepts only same-site admin paths; anything else yields null. */
 export function safeReturnTo(value: unknown): string | null {
@@ -312,72 +304,6 @@ export function locationsAdminRoutes(deps: AppDeps): Hono {
       throw e;
     }
     return c.redirect('/admin/locations', 302);
-  });
-
-  return app;
-}
-
-export function candidatesRoutes(deps: AppDeps): Hono {
-  const { db } = deps;
-  const app = new Hono();
-
-  app.get('/', (c) => {
-    const slug = c.req.query('category');
-    const category = slug ? getCategoryBySlug(db, slug) : null;
-    if (slug && !category) return c.notFound();
-    if (!category) {
-      return page(
-        c,
-        'Candidates',
-        <>
-          <h1>Candidates</h1>
-          <ul>
-            {listCategories(db).map((cat) => (
-              <li>
-                <a href={`/admin/candidates?category=${encodeURIComponent(cat.slug)}`}>{cat.name}</a>
-              </li>
-            ))}
-          </ul>
-        </>,
-        200,
-        { layout: 'admin', activeNav: 'review' },
-      );
-    }
-    const report = reportLine(c.req.query());
-    const items = listLocations(db)
-      .filter((l) => l.status === 'candidate' && l.categoryId === category.id)
-      .map((l) => ({
-        id: l.id,
-        title: l.name,
-        subtitle: [
-          l.distanceMi === null ? null : `${l.distanceMi.toFixed(1)} mi`,
-          l.rating === null ? null : `${l.rating} stars`,
-          l.phone,
-        ]
-          .filter((p) => p !== null)
-          .join(' · '),
-      }));
-    return page(
-      c,
-      'Candidates',
-      <>
-        <h1>Candidates: {category.name}</h1>
-        {report && <p role="status">{report}</p>}
-        <ReviewQueue
-          title="Candidates"
-          empty="No candidates to review."
-          items={items}
-          approveAction={(id) => `/admin/locations/${id}/approve`}
-          rejectAction={(id) => `/admin/locations/${id}/reject`}
-          returnTo={`/admin/candidates?category=${encodeURIComponent(category.slug)}`}
-        />
-        <p>
-          <a href="/admin/candidates">All categories</a>
-        </p>
-      </>,
-      200,
-      { layout: 'admin', activeNav: 'review' },
-    );
   });
 
   return app;

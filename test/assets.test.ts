@@ -15,7 +15,12 @@ describe('static assets', () => {
     const cc = res.headers.get('cache-control') ?? '';
     expect(cc).toContain('max-age=31536000');
     expect(cc).toContain('immutable');
-    expect(await res.text()).toContain('--primary');
+    const css = await res.text();
+    // Admin pages share the family app's light visual system.
+    expect(css).toContain('--solid: #16181d');
+    expect(css).toContain('--bg: #f6f5f1');
+    expect(css).toContain('font-family: "Public Sans"');
+    expect(css).not.toContain('prefers-color-scheme');
   });
 
   it('unhashed or stale-hash requests get a short cache, not immutable', async () => {

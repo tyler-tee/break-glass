@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { count, eq, sql } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
@@ -16,7 +16,7 @@ import type { LayoutContext, PageChrome } from './web/Layout.js';
 import { notFoundPage, serverErrorPage } from './web/errorPages.js';
 import { readSession, sessionKey } from './features/admin/auth.js';
 import { installState } from './features/admin/install.js';
-import { settings } from './db/schema.js';
+import { locations, settings } from './db/schema.js';
 import { createSecretsStore, type SecretsStore } from './features/admin/secrets.js';
 import { makeServiceResolver, type PlacesDep, type ServiceResolver } from './services/resolver.js';
 import { createSetupCodeManager, type SetupCodeManager } from './features/admin/setupCode.js';
@@ -62,6 +62,7 @@ export function createApp(input: AppDeps): Hono {
           deps.db.select({ n: settings.householdName }).from(settings).where(eq(settings.id, 1)).get()?.n?.trim() ||
           undefined,
         setupIncomplete: installState(deps) === 'incomplete',
+        warnCount: deps.db.select({ n: count() }).from(locations).where(eq(locations.status, 'warn')).get()?.n ?? 0,
       };
       return memo;
     });

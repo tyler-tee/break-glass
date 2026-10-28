@@ -2,8 +2,6 @@ import { Hono } from 'hono';
 import type { Child } from 'hono/jsx';
 import type { AppDeps } from '../../app.js';
 import { page } from '../../web/Layout.js';
-import { placesOf } from '../../services/resolver.js';
-import { FindRunActive, NoHomeLocation, findRunDeps, startFindRun } from '../locations/findAndRank.js';
 import type { HoursNeed } from '../../domain/types.js';
 import { CategoryError, createCategory, deleteCategory, getCategory, listCategories, updateCategory } from './repo.js';
 
@@ -26,9 +24,12 @@ export function categoriesRoutes(deps: AppDeps): Hono {
       <>
         <h1>Categories</h1>
         {opts.error && <p role="alert">{opts.error}</p>}
-        <p>
-          <a href="/admin/categories/new">New category</a>
-        </p>
+        <div class="page-actions">
+          <a class="btn btn-secondary" href="/admin/categories/new">
+            New category
+          </a>
+          <a href="/admin/places/find">Find &amp; rank places for these categories</a>
+        </div>
         <table class="stack-table t-categories">
           <thead>
             <tr>
@@ -45,12 +46,9 @@ export function categoriesRoutes(deps: AppDeps): Hono {
                 <td>{cat.name}</td>
                 <td>{cat.slug}</td>
                 <td>{cat.searchTerms.join(', ')}</td>
-                <td>{cat.hoursNeed}</td>
+                <td>{cat.hoursNeed === 'daytime' ? 'Daytime' : 'Overnight'}</td>
                 <td class="row-actions">
                   <a href={`/admin/categories/${cat.id}/edit`}>Edit</a>
-                  <form method="post" action={`/admin/categories/${cat.id}/discover`} data-busy="Searching nearby…">
-                    <button type="submit" class="btn-secondary">Discover</button>
-                  </form>
                   <form method="post" action={`/admin/categories/${cat.id}/delete`}>
                     <button type="submit" class="btn-danger">Delete</button>
                   </form>
@@ -157,35 +155,6 @@ export function categoriesRoutes(deps: AppDeps): Hono {
       throw e;
     }
     return c.redirect('/admin/categories', 302);
-  });
-
-  app.post('/:id/discover', async (c) => {
-    const id = Number(c.req.param('id'));
-    const category = getCategory(db, id);
-    if (!category) return c.notFound();
-    const places = placesOf(deps);
-    if (!places) {
-      return listPage(c, {
-        error: (
-          <>
-            Add a Google Places key in Setup → Services to enable discovery.{' '}
-            <a href="/admin/setup/services">Add a key</a>
-          </>
-        ),
-        status: 400,
-      });
-    }
-    // Stopgap until the Find places page replaces this button: start a run for this one category and go to
-    // the review queue. The run carries on in the background; one already running is left to finish.
-    try {
-      startFindRun(db, [id], findRunDeps(deps, places));
-    } catch (e) {
-      if (e instanceof NoHomeLocation) {
-        return listPage(c, { error: 'Set the home location in Settings first', status: 400 });
-      }
-      if (!(e instanceof FindRunActive)) throw e;
-    }
-    return c.redirect(`/admin/candidates?${new URLSearchParams({ category: category.slug })}`, 302);
   });
 
   app.post('/:id/delete', (c) => {

@@ -79,7 +79,7 @@ describe('admin dashboard', () => {
       expect(t).toContain(`<span class="stat-label">${label}</span>`);
     };
     expectTile('approved', '/admin/locations', '4', 'approved places');
-    expectTile('candidates', '/admin/candidates', '1', 'candidate awaiting review');
+    expectTile('candidates', '/admin/places/find', '1', 'candidate awaiting review');
     expectTile('warnings', '/admin/warn', '3', 'warnings');
     expectTile('published', '/admin/protocols', '2', 'published protocols');
     expectTile('rereview', '/admin/protocols', '5', 'protocols needing re-review');
