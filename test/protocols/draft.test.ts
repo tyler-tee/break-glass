@@ -237,7 +237,7 @@ describe('protocol admin routes', () => {
     const p = choking();
     const res = await app.request(`/admin/protocols/${p.id}/draft`, form(cookie, { source_urls: RC }));
     expect(res.status).toBe(503);
-    expect(await res.text()).toContain('Set LLM_PROVIDER and LLM_API_KEY to enable drafting');
+    expect(await res.text()).toContain('Add an Anthropic key in');
   });
 
   it('draft route maps provider errors to 502', async () => {

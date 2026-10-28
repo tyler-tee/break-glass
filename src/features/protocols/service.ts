@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Db, DbOrTx } from '../../db/client.js';
 import type { Logger, ProtocolStatus } from '../../domain/types.js';
-import { assertSopHeadings, draftProtocol } from '../../services/llm/draft.js';
+import { SOP_HEADINGS, assertSopHeadings, draftProtocol } from '../../services/llm/draft.js';
 import { LlmValidationError, type LlmProvider } from '../../services/llm/provider.js';
 import { fetchPage, type LookupFn } from '../../services/llm/web.js';
 import {
@@ -118,6 +118,35 @@ export async function generateDraft(
       })),
     );
     return version;
+  });
+}
+
+export const MANUAL_TEMPLATE =
+  [
+    `${SOP_HEADINGS[0]}\nWhat this covers and who it is for.`,
+    `${SOP_HEADINGS[1]}\n1. First step.`,
+    `${SOP_HEADINGS[2]}\nCall 911 or go to the ER if ...`,
+    `${SOP_HEADINGS[3]}\n- Common mistake to avoid.`,
+  ].join('\n\n') + '\n';
+
+/**
+ * Starts a hand-written draft prefilled with the four required SOP headings, so a household with no LLM key
+ * can still publish a protocol. If the protocol already has an open (draft / in_review) version, that version
+ * is returned instead of creating a second open draft.
+ */
+export function createManualDraft(db: Db, protocolId: number, now: Date): ProtocolVersion {
+  if (!getProtocol(db, protocolId)) throw new ProtocolError('not_found', 'Protocol not found');
+  return db.transaction((tx) => {
+    const open = listVersions(tx, protocolId).find((v) => v.status === 'draft' || v.status === 'in_review');
+    if (open) return open;
+    assertSopHeadings(MANUAL_TEMPLATE);
+    return insertVersion(tx, {
+      protocolId,
+      version: nextVersionNumber(tx, protocolId),
+      status: 'draft',
+      bodyMd: MANUAL_TEMPLATE,
+      createdAt: now,
+    });
   });
 }
 

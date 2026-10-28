@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { raw } from 'hono/html';
+import type { Child } from 'hono/jsx';
 import type { AppDeps } from '../../app.js';
 import { slugify } from '../../domain/slug.js';
 import { LlmRefusalError, LlmValidationError } from '../../services/llm/provider.js';
@@ -18,6 +19,7 @@ import {
 } from './repo.js';
 import {
   ProtocolError,
+  createManualDraft,
   generateDraft,
   parseAllowlist,
   publishVersion,
@@ -27,6 +29,19 @@ import {
 } from './service.js';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+/** Only the wizard may ask for the "Back to setup" link; any other value is ignored. */
+const fromSetup = (v: unknown): boolean => v === 'setup';
+const NO_LLM: Child = (
+  <>
+    Add an Anthropic key in <a href="/admin/setup/services">Setup → Services</a> to draft protocols from sources — or write one
+    yourself.
+  </>
+);
+const BackToSetup = () => (
+  <p>
+    <a href="/admin/setup/protocol">Back to setup</a>
+  </p>
+);
 const fmt = (d: Date | null): string => (d ? d.toISOString().slice(0, 10) : '');
 
 export function protocolsAdminRoutes(deps: AppDeps): Hono {
@@ -70,10 +85,11 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
   const detailPage = (
     c: Parameters<typeof page>[0],
     id: number,
-    opts: { error?: string; status?: 200 | 400 | 404 | 502 | 503; urls?: string } = {},
+    opts: { error?: Child; status?: 200 | 400 | 404 | 502 | 503; urls?: string; setup?: boolean } = {},
   ) => {
     const protocol = getProtocol(db, id);
     if (!protocol) return c.notFound();
+    const hasLlm = llmOf(deps) !== undefined;
     const versions = listVersions(db, id);
     const latest = versions[0];
     const prefill = opts.urls ?? (latest ? listSources(db, latest.id).map((s) => s.url).join('\n') : '');
@@ -108,9 +124,20 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
             ))}
           </tbody>
         </table>
+        {opts.setup && <BackToSetup />}
+        <h2>Write it yourself</h2>
+        <form method="post" action={`/admin/protocols/${id}/manual-draft`}>
+          {opts.setup && <input type="hidden" name="from" value="setup" />}
+          <p class="muted">Start from the four required headings and fill them in by hand. Nothing is published until you approve it.</p>
+          <button type="submit" class="btn-secondary">
+            Write it yourself
+          </button>
+        </form>
         <h2>Generate draft</h2>
+        {!hasLlm && !opts.error && <p class="muted">{NO_LLM}</p>}
         {allowlist.length > 0 && <p class="muted">Allowed source hosts: {allowlist.join(', ')}</p>}
         <form id="draft" method="post" action={`/admin/protocols/${id}/draft`}>
+          {opts.setup && <input type="hidden" name="from" value="setup" />}
           <p>
             <label>
               Source URLs (one per line)
@@ -119,7 +146,9 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
               </textarea>
             </label>
           </p>
-          <button type="submit">Generate draft</button>
+          <button type="submit" disabled={!hasLlm}>
+            Generate draft
+          </button>
         </form>
         <p>
           <a href="/admin/protocols">Back to protocols</a>
@@ -134,7 +163,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
     c: Parameters<typeof page>[0],
     protocolId: number,
     versionId: number,
-    opts: { error?: string; status?: 200 | 400 | 409; bodyMd?: string } = {},
+    opts: { error?: string; status?: 200 | 400 | 409; bodyMd?: string; setup?: boolean } = {},
   ) => {
     const protocol = getProtocol(db, protocolId);
     const version = getVersion(db, versionId);
@@ -177,24 +206,24 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         {open && (
           <>
             <h2>Edit</h2>
-            <form method="post" action={`${base}/body`}>
+            <form method="post" action={`${base}/body${opts.setup ? "?from=setup" : ""}`}>
               <textarea name="body_md" rows={20}>
                 {opts.bodyMd ?? version.bodyMd}
               </textarea>
               <button type="submit">Save</button>
             </form>
             {version.status === 'draft' && (
-              <form method="post" action={`${base}/submit`}>
+              <form method="post" action={`${base}/submit${opts.setup ? "?from=setup" : ""}`}>
                 <button type="submit">Submit for review</button>
               </form>
             )}
-            <form method="post" action={`${base}/publish`}>
+            <form method="post" action={`${base}/publish${opts.setup ? "?from=setup" : ""}`}>
               <label>
                 Notes <input name="notes" />
               </label>
               <button type="submit">Approve &amp; publish</button>
             </form>
-            <form method="post" action={`${base}/reject`}>
+            <form method="post" action={`${base}/reject${opts.setup ? "?from=setup" : ""}`}>
               <label>
                 Notes <input name="notes" required />
               </label>
@@ -205,6 +234,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         <p>
           <a href={`/admin/protocols/${protocolId}`}>Back to protocol</a>
         </p>
+        {opts.setup && <BackToSetup />}
       </>,
       opts.status ?? 200,
       { layout: 'admin', activeNav: 'protocols' },
@@ -228,15 +258,21 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
           return reviewPage(c, protocolId, versionId, {
             error: e.message,
             status: e.code === 'invalid_transition' ? 409 : 400,
+            setup: fromSetup(c.req.query('from')),
             ...(bodyMd !== undefined ? { bodyMd } : {}),
           });
         }
         throw e;
       }
-      return c.redirect(`/admin/protocols/${protocolId}/versions/${versionId}`, 302);
+      return c.redirect(
+        `/admin/protocols/${protocolId}/versions/${versionId}${fromSetup(c.req.query('from')) ? '?from=setup' : ''}`,
+        302,
+      );
     };
 
-  app.get('/:id/versions/:vid', (c) => reviewPage(c, Number(c.req.param('id')), Number(c.req.param('vid'))));
+  app.get('/:id/versions/:vid', (c) =>
+    reviewPage(c, Number(c.req.param('id')), Number(c.req.param('vid')), { setup: fromSetup(c.req.query('from')) }),
+  );
 
   app.post(
     '/:id/versions/:vid/body',
@@ -319,17 +355,19 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
     return c.redirect('/admin/protocols', 302);
   });
 
-  app.get('/:id', (c) => detailPage(c, Number(c.req.param('id'))));
+  app.get('/:id', (c) => detailPage(c, Number(c.req.param('id')), { setup: fromSetup(c.req.query('from')) }));
 
   app.post('/:id/draft', async (c) => {
     const id = Number(c.req.param('id'));
     if (!getProtocol(db, id)) return c.notFound();
     const body = await c.req.parseBody();
     const urls = str(body['source_urls']);
+    const setup = fromSetup(body['from']);
     const llm = llmOf(deps);
     if (!llm) {
       return detailPage(c, id, {
-        error: 'Set LLM_PROVIDER and LLM_API_KEY to enable drafting',
+        error: NO_LLM,
+        setup,
         status: 503,
         urls,
       });
@@ -351,11 +389,12 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
           error: e.detail ? `${e.message}: ${e.detail}` : e.message,
           status: 400,
           urls,
+          setup,
         });
       }
       if (e instanceof LlmValidationError || e instanceof LlmRefusalError) {
         const reason = e instanceof LlmRefusalError ? e.message : e.message.split(': ')[0];
-        return detailPage(c, id, { error: `Draft rejected: ${reason}`, status: 502, urls });
+        return detailPage(c, id, { error: `Draft rejected: ${reason}`, status: 502, urls, setup });
       }
       if (e instanceof Error) {
         // Provider failures (rate limit, 5xx, auth, network). The SDK never echoes the key in messages.
@@ -364,11 +403,30 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
           error: `Draft rejected: LLM provider error: ${e.message.slice(0, 200)}`,
           status: 502,
           urls,
+          setup,
         });
       }
       throw e;
     }
+    const latest = listVersions(db, id)[0];
+    if (setup && latest) return c.redirect(`/admin/protocols/${id}/versions/${latest.id}?from=setup`, 302);
     return c.redirect(`/admin/protocols/${id}`, 302);
+  });
+
+  app.post('/:id/manual-draft', async (c) => {
+    const id = Number(c.req.param('id'));
+    const body = await c.req.parseBody();
+    let version;
+    try {
+      version = createManualDraft(db, id, now());
+    } catch (e) {
+      if (e instanceof ProtocolError && e.code === 'not_found') return c.notFound();
+      throw e;
+    }
+    return c.redirect(
+      `/admin/protocols/${id}/versions/${version.id}${fromSetup(body['from']) ? '?from=setup' : ''}`,
+      302,
+    );
   });
 
   return app;

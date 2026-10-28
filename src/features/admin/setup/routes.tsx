@@ -4,8 +4,10 @@ import type { ResolvedAppDeps } from '../../../app.js';
 import { page } from '../../../web/Layout.js';
 import { installState } from '../install.js';
 import { registerCategoriesStep } from './categoriesStep.js';
+import { registerDoneStep } from './doneStep.js';
 import { registerHomeStep } from './homeStep.js';
 import { registerPlacesStep } from './placesStep.js';
+import { registerProtocolStep } from './protocolStep.js';
 import { registerServicesStep } from './servicesStep.js';
 import type { SetupContext, Status } from './shared.js';
 import { STEPS, STEP_LABELS, resumeTarget, stepDone, stepPath, type Step } from './steps.js';
@@ -32,6 +34,8 @@ export function setupRoutes(deps: ResolvedAppDeps): Hono {
   registerHomeStep(app, ctx);
   registerCategoriesStep(app, ctx);
   registerPlacesStep(app, ctx);
+  registerProtocolStep(app, ctx);
+  registerDoneStep(app, ctx);
 
   return app;
 }
