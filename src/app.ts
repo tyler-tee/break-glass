@@ -1,5 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
+import { HTTPException } from 'hono/http-exception';
 import type { Db } from './db/client.js';
 import type { Extractor } from './services/llm/extract.js';
 import type { LlmProvider } from './services/llm/provider.js';
@@ -12,13 +14,18 @@ import { adminRoutes } from './features/admin/routes.js';
 import { registerAssets } from './web/assets.js';
 import type { LayoutContext, PageChrome } from './web/Layout.js';
 import { notFoundPage, serverErrorPage } from './web/errorPages.js';
-import { readSession } from './features/admin/auth.js';
+import { readSession, sessionKey } from './features/admin/auth.js';
 import { installState } from './features/admin/install.js';
 import { settings } from './db/schema.js';
 import { createSecretsStore, type SecretsStore } from './features/admin/secrets.js';
 import { makeServiceResolver, type PlacesDep, type ServiceResolver } from './services/resolver.js';
 import { createSetupCodeManager, type SetupCodeManager } from './features/admin/setupCode.js';
 import { setupClaimRoutes } from './features/admin/setupClaim.js';
+
+/** Cap for any request body. */
+export const MAX_BODY_BYTES = 256 * 1024;
+/** Cap for the public, unauthenticated POSTs (/setup and /admin/login). */
+export const MAX_PUBLIC_BODY_BYTES = 16 * 1024;
 
 export type AppDeps = { db: Db; env: Env; now?: () => Date; scheduler?: SchedulerHandle;
   // Static service deps (tests inject fakes); read them via placesOf/llmOf/extractOf so the resolver wins.
@@ -65,13 +72,15 @@ export function createApp(input: AppDeps): Hono {
   const chromeFor = async (c: Context): Promise<PageChrome> => {
     if (!c.req.path.startsWith('/admin')) return {};
     try {
-      return (await readSession(c, deps.secrets.getSessionSecret(), now())) ? { layout: 'admin' } : {};
+      return (await readSession(c, sessionKey(deps.secrets), now())) ? { layout: 'admin' } : {};
     } catch {
       return {};
     }
   };
   app.notFound(async (c) => notFoundPage(c, await chromeFor(c)));
   app.onError(async (err, c) => {
+    // Deliberate HTTP errors (e.g. bodyLimit's 413) keep their status instead of becoming a 500 page.
+    if (err instanceof HTTPException) return err.getResponse();
     console.error('unhandled error', c.req.method, c.req.path, err);
     try {
       return serverErrorPage(c, await chromeFor(c));
@@ -87,6 +96,11 @@ export function createApp(input: AppDeps): Hono {
       return c.json({ ok: false }, 503);
     }
   });
+  // Every request body is capped; the unauthenticated forms get a much tighter cap. The general limit leaves
+  // room for the largest legitimate body, a protocol's markdown (tens of KB at most).
+  app.use('*', bodyLimit({ maxSize: MAX_BODY_BYTES }));
+  app.post('/setup', bodyLimit({ maxSize: MAX_PUBLIC_BODY_BYTES }));
+  app.post('/admin/login', bodyLimit({ maxSize: MAX_PUBLIC_BODY_BYTES }));
   registerAssets(app);
   app.route('/setup', setupClaimRoutes(deps)); // public; POST is same-origin checked inside
   app.route('/', familyRoutes(deps));

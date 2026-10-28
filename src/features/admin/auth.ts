@@ -1,4 +1,4 @@
-import { randomBytes, scrypt, timingSafeEqual, type BinaryLike, type ScryptOptions } from 'node:crypto';
+import { createHmac, randomBytes, scrypt, timingSafeEqual, type BinaryLike, type ScryptOptions } from 'node:crypto';
 import type { Context, MiddlewareHandler } from 'hono';
 import { getSignedCookie, setSignedCookie } from 'hono/cookie';
 
@@ -36,6 +36,17 @@ export async function verifyPassword(pw: string, stored: string): Promise<boolea
   }
 }
 
+/**
+ * The key bg_session cookies are signed with: HMAC-SHA256(session secret, 'bg_session:' + admin hash), hex.
+ * Computed per request, so any password change or reset (which always stores a new, freshly salted hash)
+ * signs every existing session out, even when SESSION_SECRET comes from the environment and cannot rotate.
+ */
+export function sessionKey(secrets: { getSessionSecret(): string; getAdminHash(): string | undefined }): string {
+  return createHmac('sha256', secrets.getSessionSecret())
+    .update(`bg_session:${secrets.getAdminHash() ?? ''}`)
+    .digest('hex');
+}
+
 export async function createSession(c: Context, secret: string, now: Date): Promise<void> {
   await setSignedCookie(c, SESSION_COOKIE, JSON.stringify({ exp: now.getTime() + SESSION_TTL_MS }), secret, {
     httpOnly: true,
@@ -56,7 +67,7 @@ export async function readSession(c: Context, secret: string, now: Date): Promis
   }
 }
 
-/** getSecret is called on every request so a rotated session secret takes effect immediately. */
+/** getSecret is called on every request so a rotated secret or changed admin hash takes effect immediately. */
 export function requireAdmin(getSecret: () => string, now: () => Date): MiddlewareHandler {
   return async (c, next) => {
     if (!(await readSession(c, getSecret(), now()))) {

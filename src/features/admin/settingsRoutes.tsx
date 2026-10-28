@@ -6,7 +6,7 @@ import { PlacesError, geocode } from '../../services/places/client.js';
 import { placesOf } from '../../services/resolver.js';
 import { page } from '../../web/Layout.js';
 import { budgetExhaustedPage, placesErrorPage } from '../../web/placesErrorPage.js';
-import { createSession, hashPassword, verifyPassword } from './auth.js';
+import { createSession, hashPassword, sessionKey, verifyPassword } from './auth.js';
 import { SettingsValidationError, getSettings, updateSettings, type Settings } from './settingsRepo.js';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -99,11 +99,7 @@ export function settingsRoutes(deps: ResolvedAppDeps): Hono {
                 restart.
               </p>
             ) : (
-              secrets.isEnvProvided('sessionSecret') ? (
-                <p class="muted">Choose a new password for the admin account.</p>
-              ) : (
-                <p class="muted">Changing it signs out every other device.</p>
-              )
+              <p class="muted">Changing it signs out every other device.</p>
             )}
             <p>
               <label>
@@ -177,9 +173,10 @@ export function settingsRoutes(deps: ResolvedAppDeps): Hono {
     if (next.length < 12) return fail({ field: 'new', message: 'New password must be at least 12 characters' });
     if (next !== confirm) return fail({ field: 'confirm', message: 'Passwords do not match' });
     secrets.setAdminHash(await hashPassword(next));
-    // New secret kills every other device's cookie; skipped when SESSION_SECRET comes from the environment.
+    // The new hash alone changes the session signing key (sessionKey), so every other device is signed out even
+    // with an env SESSION_SECRET; an app-managed secret is rotated as well.
     if (!secrets.isEnvProvided('sessionSecret')) secrets.rotateSessionSecret();
-    await createSession(c, secrets.getSessionSecret(), now());
+    await createSession(c, sessionKey(secrets), now());
     return c.redirect('/admin/settings?saved=1', 302);
   });
 

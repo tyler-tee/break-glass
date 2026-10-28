@@ -6,8 +6,9 @@ import { loadDotEnvFiles, loadEnv, type Env } from '../env.js';
 import { createSecretsStore } from '../features/admin/secrets.js';
 
 /**
- * Clears the DB-held admin password so the install is unclaimed again, and rotates the DB session secret so
- * sessions from before the reset stop working. Never prints hashes or secrets.
+ * Clears the DB-held admin password so the install is unclaimed again. Session cookies are signed with a key
+ * derived from the admin hash (sessionKey), so sessions from before the reset stop working whatever the source
+ * of SESSION_SECRET; an app-managed secret is rotated as well. Never prints hashes or secrets.
  */
 export function resetAdmin(db: Db, env: Env, log: Logger = console): 'reset' | 'env-managed' {
   const secrets = createSecretsStore(db, env);

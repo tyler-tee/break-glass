@@ -117,7 +117,7 @@ In the Google Cloud console, also restrict the API key to "Places API (New)" onl
 
 - The app is meant for a trusted LAN over plain HTTP. Do not expose it to the internet.
 - Session cookies are HttpOnly, SameSite and signed, but not Secure (that would break plain HTTP). They expire after 12 hours.
-- Sessions are stateless signed cookies, so they cannot be revoked individually. Changing the admin password signs out every other device only when `SESSION_SECRET` is not set in the environment (the app then rotates its own secret). If you set `SESSION_SECRET` yourself, change it and restart to sign everyone out.
+- Sessions are stateless signed cookies, so they cannot be revoked individually. They are signed with a key derived from both the session secret and the current admin password hash, so changing the admin password (or resetting it) signs out every other device, whether or not `SESSION_SECRET` is set in the environment. To sign everyone out without changing the password, set a new `SESSION_SECRET` in the environment and restart.
 - Secrets saved in the app (API keys, password hash, session secret) live in the SQLite database on the `bg-data` volume. That is the same trust boundary as a `.env` file on the host: whoever can read the volume can read them.
 - Website fetches (extraction and protocol sources) are SSRF-guarded against private and loopback addresses, but DNS rebinding is not fully closed.
 - LLM output is validated against a schema and sanitized at render time (markdown is converted to HTML and cleaned before it is shown); nothing is published without admin review.

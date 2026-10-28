@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
+import { settings } from '../../src/db/schema.js';
 import { loadEnv } from '../../src/env.js';
 import { hashPassword, verifyPassword } from '../../src/features/admin/auth.js';
 import { createTestDb } from '../helpers/testDb.js';
@@ -9,8 +10,11 @@ let t: Date;
 
 beforeEach(async () => {
   t = new Date('2026-10-27T16:00:00Z');
+  // A finished install: these tests pin where login lands when the wizard is not pending.
+  const db = createTestDb();
+  db.update(settings).set({ setupCompletedAt: t }).run();
   app = createApp({
-    db: createTestDb(),
+    db,
     env: loadEnv({
       SESSION_SECRET: 's'.repeat(32),
       ADMIN_PASSWORD_HASH: await hashPassword('correct horse'),
@@ -98,6 +102,30 @@ describe('admin auth', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/admin/login');
     expect(res.headers.get('set-cookie')).toContain('bg_session=;');
+  });
+});
+
+describe('login next while setup is incomplete', () => {
+  const loginTo = async (next: string) => {
+    const db = createTestDb(); // setupCompletedAt is null: the wizard is pending
+    const a = createApp({
+      db,
+      env: loadEnv({ SESSION_SECRET: 's'.repeat(32), ADMIN_PASSWORD_HASH: await hashPassword('correct horse') }),
+    });
+    const body = new URLSearchParams({ password: 'correct horse', ...(next === '<absent>' ? {} : { next }) }).toString();
+    return (await a.request('/admin/login', form(body))).headers.get('location');
+  };
+
+  it('treats next=/admin and /admin/ like no next and resumes the wizard', async () => {
+    expect(await loginTo('<absent>')).toBe('/admin/setup');
+    expect(await loginTo('')).toBe('/admin/setup');
+    expect(await loginTo('/admin')).toBe('/admin/setup');
+    expect(await loginTo('/admin/')).toBe('/admin/setup');
+  });
+
+  it('still honors an explicit deeper /admin path', async () => {
+    expect(await loginTo('/admin/protocols')).toBe('/admin/protocols');
+    expect(await loginTo('/admin/setup/home')).toBe('/admin/setup/home');
   });
 });
 

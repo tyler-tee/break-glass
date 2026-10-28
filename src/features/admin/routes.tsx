@@ -12,7 +12,7 @@ import { settingsRoutes } from './settingsRoutes.js';
 import { setupRoutes } from './setup/routes.js';
 import type { JobName, RunResult } from '../../jobs/scheduler.js';
 import { newPlacesBudget } from '../../services/places/budget.js';
-import { SESSION_COOKIE, createSession, requireAdmin, requireSameOrigin, verifyPassword } from './auth.js';
+import { SESSION_COOKIE, createSession, requireAdmin, requireSameOrigin, sessionKey, verifyPassword } from './auth.js';
 
 const JOB_NAMES: readonly string[] = ['refreshLocations', 'recheckProtocols'];
 
@@ -65,13 +65,15 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
     if (!(await verifyPassword(password, secrets.getAdminHash() ?? ''))) {
       return loginPage(c, next, 401);
     }
-    await createSession(c, secrets.getSessionSecret(), now());
-    // Resume the first-run wizard when the admin did not ask for a specific page.
-    if (next === '' && installState(deps) === 'incomplete') return c.redirect('/admin/setup', 302);
+    await createSession(c, sessionKey(secrets), now());
+    // Resume the first-run wizard when the admin did not ask for a specific page. Plain /admin counts as "no
+    // specific page": it is what the login redirect and most links send, and the wizard is where work is left.
+    const unspecific = next === '' || next === '/admin' || next === '/admin/';
+    if (unspecific && installState(deps) === 'incomplete') return c.redirect('/admin/setup', 302);
     return c.redirect(next || '/admin', 302);
   });
 
-  app.use('*', requireAdmin(() => secrets.getSessionSecret(), now));
+  app.use('*', requireAdmin(() => sessionKey(secrets), now));
   app.use('*', requireSameOrigin);
 
   app.get('/', (c) => {

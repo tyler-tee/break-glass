@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import type { ResolvedAppDeps } from '../../app.js';
 import { page } from '../../web/Layout.js';
-import { createSession, hashPassword, requireSameOrigin } from './auth.js';
+import { createSession, hashPassword, requireSameOrigin, sessionKey } from './auth.js';
 import { installState } from './install.js';
 
 export const MIN_PASSWORD_LENGTH = 12;
@@ -147,7 +147,7 @@ export function setupClaimRoutes(deps: ResolvedAppDeps): Hono {
     if (installState(deps) !== 'unclaimed') return c.notFound();
     secrets.setAdminHash(hash);
     setupCode.reset(); // drop any code another request issued while this one was hashing
-    await createSession(c, secrets.getSessionSecret(), now());
+    await createSession(c, sessionKey(secrets), now());
     noStore(c);
     return c.redirect('/admin/setup', 302);
   });

@@ -101,9 +101,9 @@ describe('change password hint (session secret source)', () => {
     expect(await setup({})).toContain('signs out every other device');
   });
 
-  it('omits that claim when SESSION_SECRET comes from the environment', async () => {
+  it('makes the same claim when SESSION_SECRET comes from the environment (sessions are bound to the hash)', async () => {
     const html = await setup({ SESSION_SECRET: 's'.repeat(32) });
-    expect(html).not.toContain('signs out every other device');
+    expect(html).toContain('signs out every other device');
     expect(html).toContain('Change password');
   });
 });
