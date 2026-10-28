@@ -42,6 +42,16 @@ describe('static assets', () => {
     expect((await a.request('/assets/manifest.webmanifest')).headers.get('content-type')).toContain('application/manifest+json');
   });
 
+  it('admin.js is served as javascript and implements data-busy', async () => {
+    const res = await app().request('/assets/admin.js');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('javascript');
+    const body = await res.text();
+    expect(body).toContain('data-busy');
+    expect(body).toContain('pageshow');
+    expect(body).toContain('submitter');
+  });
+
   it('unknown and traversal paths 404', async () => {
     const a = app();
     expect((await a.request('/assets/nope.css')).status).toBe(404);

@@ -141,7 +141,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
           </p>
         )}
         {allowlist.length > 0 && <p class="muted">Allowed source hosts: {allowlist.join(', ')}</p>}
-        <form id="draft" method="post" action={`/admin/protocols/${id}/draft`}>
+        <form id="draft" method="post" action={`/admin/protocols/${id}/draft`} data-busy="Drafting from your sources…">
           {opts.setup && <input type="hidden" name="from" value="setup" />}
           <p>
             <label>

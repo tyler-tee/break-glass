@@ -49,7 +49,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
                 <td>{cat.targetCount}</td>
                 <td class="row-actions">
                   <a href={`/admin/categories/${cat.id}/edit`}>Edit</a>
-                  <form method="post" action={`/admin/categories/${cat.id}/discover`}>
+                  <form method="post" action={`/admin/categories/${cat.id}/discover`} data-busy="Searching nearby…">
                     <button type="submit" class="btn-secondary">Discover</button>
                   </form>
                   <form method="post" action={`/admin/categories/${cat.id}/delete`}>
