@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
-import { categories, locations } from '../../db/schema.js';
+import { categories, houseFacts, locations } from '../../db/schema.js';
 import { slugify } from '../../domain/slug.js';
 import { AREAS, type Area, type HoursNeed } from '../../domain/types.js';
 
@@ -99,5 +99,7 @@ export function deleteCategory(db: Db, id: number): void {
   if (!getCategory(db, id)) throw new CategoryError('not_found', 'Category not found');
   const used = db.select({ id: locations.id }).from(locations).where(eq(locations.categoryId, id)).get();
   if (used) throw new CategoryError('in_use', 'Category is in use by existing locations and cannot be deleted');
+  const linked = db.select({ id: houseFacts.id }).from(houseFacts).where(eq(houseFacts.categoryId, id)).get();
+  if (linked) throw new CategoryError('in_use', 'Category is in use by house facts and cannot be deleted');
   db.delete(categories).where(eq(categories.id, id)).run();
 }

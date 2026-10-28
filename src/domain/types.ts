@@ -1,5 +1,11 @@
 export const AREAS = ['health', 'home'] as const;
 export type Area = (typeof AREAS)[number];
+export const HOUSE_FACT_KINDS = ['shutoff', 'utility', 'contact', 'note'] as const;
+export type HouseFactKind = (typeof HOUSE_FACT_KINDS)[number];
+export const HOUSE_SYSTEMS = ['water', 'gas', 'electric', 'hvac', 'general'] as const;
+export type HouseSystem = (typeof HOUSE_SYSTEMS)[number];
+export const PHOTO_MIMES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export type PhotoMime = (typeof PHOTO_MIMES)[number];
 export type LocationStatus = 'candidate' | 'approved' | 'warn' | 'rejected';
 export type HoursNeed = 'overnight' | 'daytime';
 export type RankVerdict = 'pick' | 'backup' | 'avoid';

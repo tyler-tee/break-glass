@@ -8,6 +8,7 @@ import type { LlmProvider } from './services/llm/provider.js';
 import type { LookupFn } from './services/llm/web.js';
 import type { Env } from './env.js';
 import { familyRoutes } from './features/family/routes.js';
+import { UPLOAD_PATH, housePublicRoutes } from './features/house/routes.js';
 import { apiRoutes } from './features/api/routes.js';
 import type { SchedulerHandle } from './jobs/scheduler.js';
 import { adminRoutes } from './features/admin/routes.js';
@@ -99,11 +100,14 @@ export function createApp(input: AppDeps): Hono {
   });
   // Every request body is capped; the unauthenticated forms get a much tighter cap. The general limit leaves
   // room for the largest legitimate body, a protocol's markdown (tens of KB at most).
-  app.use('*', bodyLimit({ maxSize: MAX_BODY_BYTES }));
+  // The photo upload route is exempt: it sets its own, larger limit after the admin auth checks have run.
+  const generalLimit = bodyLimit({ maxSize: MAX_BODY_BYTES });
+  app.use('*', (c, next) => (c.req.method === 'POST' && UPLOAD_PATH.test(c.req.path) ? next() : generalLimit(c, next)));
   app.post('/setup', bodyLimit({ maxSize: MAX_PUBLIC_BODY_BYTES }));
   app.post('/admin/login', bodyLimit({ maxSize: MAX_PUBLIC_BODY_BYTES }));
   registerAssets(app);
   app.route('/setup', setupClaimRoutes(deps)); // public; POST is same-origin checked inside
+  app.route('/house', housePublicRoutes(deps)); // photos are unauthenticated, like the family side
   app.route('/', familyRoutes(deps));
   app.route('/api', apiRoutes(deps));
   app.route('/admin', adminRoutes(deps));

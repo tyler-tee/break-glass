@@ -5,6 +5,7 @@ import { page } from '../../web/Layout.js';
 import { categoriesRoutes } from '../categories/routes.js';
 import { locationsAdminRoutes, warnRoutes } from '../locations/adminRoutes.js';
 import { findPlacesRoutes } from '../locations/findRoutes.js';
+import { houseAdminRoutes } from '../house/routes.js';
 import { protocolsAdminRoutes } from '../protocols/adminRoutes.js';
 import { installState } from './install.js';
 import { listLocations } from '../locations/repo.js';
@@ -173,6 +174,7 @@ export function adminRoutes(deps: ResolvedAppDeps): Hono {
   app.get('/candidates', (c) => c.redirect('/admin/places/find', 302));
   app.route('/warn', warnRoutes(deps));
   app.route('/protocols', protocolsAdminRoutes(deps));
+  app.route('/house', houseAdminRoutes(deps));
 
   app.post('/logout', (c) => {
     deleteCookie(c, SESSION_COOKIE, { path: '/' });

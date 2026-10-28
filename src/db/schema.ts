@@ -1,11 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { check, index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { blob, check, index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type {
   Area,
   BusinessStatus,
   FindRunProgress,
   FindRunStatus,
   HoursNeed,
+  HouseFactKind,
+  HouseSystem,
+  PhotoMime,
   LocationStatus,
   ProtocolStatus,
   RankedBy,
@@ -218,3 +221,50 @@ export const findRuns = sqliteTable(
 
 export type FindRun = typeof findRuns.$inferSelect;
 export type NewFindRun = typeof findRuns.$inferInsert;
+
+// Facts the household writes about its own home (shutoffs, utility lines, its own contractors).
+export const houseFacts = sqliteTable(
+  'house_facts',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    kind: text('kind').$type<HouseFactKind>().notNull(),
+    // Validated in app code against HOUSE_SYSTEMS (no CHECK, so the list can grow without a migration).
+    system: text('system').$type<HouseSystem>().notNull().default('general'),
+    title: text('title').notNull(),
+    whereNote: text('where_note'),
+    instructions: text('instructions'),
+    org: text('org'),
+    phone: text('phone'),
+    // Only set on contacts, and only to a category with area 'home'.
+    categoryId: integer('category_id').references(() => categories.id),
+    sortOrder: integer('sort_order').notNull().default(0),
+    checkedAt: integer('checked_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [check('house_facts_kind_check', sql`${t.kind} in ('shutoff','utility','contact','note')`)],
+);
+
+export const houseFactPhotos = sqliteTable(
+  'house_fact_photos',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    factId: integer('fact_id')
+      .notNull()
+      .references(() => houseFacts.id, { onDelete: 'cascade' }),
+    mime: text('mime').$type<PhotoMime>().notNull(),
+    bytes: blob('bytes', { mode: 'buffer' }).notNull(),
+    byteSize: integer('byte_size').notNull(),
+    sha256: text('sha256').notNull(),
+    caption: text('caption'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    index('house_fact_photos_fact_sort_idx').on(t.factId, t.sortOrder),
+    check('house_fact_photos_mime_check', sql`${t.mime} in ('image/jpeg','image/png','image/webp')`),
+  ],
+);
+
+export type HouseFact = typeof houseFacts.$inferSelect;
+export type HouseFactPhoto = typeof houseFactPhotos.$inferSelect;

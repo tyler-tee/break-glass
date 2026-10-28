@@ -50,6 +50,13 @@
       "when": 1793200608780,
       "tag": "0006_area",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793200931271,
+      "tag": "0007_house_facts",
+      "breakpoints": true
     }
   ]
 }
