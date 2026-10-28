@@ -1,16 +1,13 @@
 import type { Hono, Context } from 'hono';
-import type { Child } from 'hono/jsx';
 import { slugify } from '../../../domain/slug.js';
 import { CategoryError, createCategory, getCategoryBySlug, listCategories } from '../../categories/repo.js';
 import { CATEGORY_PRESETS } from './presets.js';
 import { StepShell } from './StepShell.js';
-import { Field, destination, firstError, goOf, one, many, str, type Errors, type SetupContext, type Status } from './shared.js';
-
+import { Field, destination, firstError, goOf, one, many, type Errors, type SetupContext, type Status } from './shared.js';
 
 /** Step 4: category presets and custom categories. */
 export function registerCategoriesStep(app: Hono, ctx: SetupContext): void {
   const { db, render, doneSteps } = ctx;
-  // ---- Step 4: Categories ---------------------------------------------------------------------------
 
   const presetSlugs = new Set(CATEGORY_PRESETS.map((p) => p.slug));
 

@@ -10,14 +10,12 @@ import { NoHomeLocation, runDiscovery } from '../../locations/discovery.js';
 import { listLocations } from '../../locations/repo.js';
 import { LocationError, createManualLocation } from '../../locations/service.js';
 import { StepShell, type Notice } from './StepShell.js';
-import { Field, destination, firstError, goOf, one, many, str, type Errors, type SetupContext, type Status } from './shared.js';
-
+import { Field, destination, goOf, str, type SetupContext, type Status } from './shared.js';
 
 /** Step 5: find places and approve them in place. */
 export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
   const { deps, db, render, doneSteps, now } = ctx;
   const { env } = deps;
-  // ---- Step 5: Find places --------------------------------------------------------------------------
 
   const count = (v: string | undefined): number | undefined => (v !== undefined && /^\d{1,6}$/.test(v) ? Number(v) : undefined);
   type Found = { categoryId: number; inserted: number; skipped: number; stopped?: 'run' | 'month' };

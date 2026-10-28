@@ -1,11 +1,10 @@
 import type { Hono, Context } from 'hono';
-import type { Child } from 'hono/jsx';
 import { testAnthropicKey, testPlacesKey, type ProbeResult } from '../../../services/keyProbe.js';
 import { LLM_OFF_BY_ENV, llmOffByEnv, placesOf } from '../../../services/resolver.js';
 import type { SecretName } from '../secrets.js';
 import { StepShell, type Notice } from './StepShell.js';
 import { nextStep, stepPath } from './steps.js';
-import { Field, destination, firstError, goOf, one, many, str, type Errors, type SetupContext, type Status } from './shared.js';
+import { Field, destination, firstError, goOf, str, type Errors, type SetupContext, type Status } from './shared.js';
 
 const KEY_MIN = 20;
 const KEY_MAX = 400;
@@ -25,7 +24,6 @@ type KeyState = { kind: 'env' } | { kind: 'saved'; last4: string | null } | { ki
 export function registerServicesStep(app: Hono, ctx: SetupContext): void {
   const { deps, render, doneSteps } = ctx;
   const { env, secrets } = deps;
-  // ---- Step 2: Services (optional API keys) -----------------------------------------------------
 
   const KEYS: Record<
     KeyName,

@@ -33,7 +33,7 @@ const scheduler = startScheduler({
     // Resolve services at run time so a key saved in the admin UI is used by the next scheduled run.
     refreshLocations: () => {
       const places = resolve.places();
-      if (!places) return Promise.resolve({ skipped: 'GOOGLE_PLACES_API_KEY not set' });
+      if (!places) return Promise.resolve({ skipped: 'No Google Places key configured' });
       const extract = resolve.extract();
       return refreshLocations(db, {
         places: { ...places, budget: newPlacesBudget(db, env) },
