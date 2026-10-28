@@ -2,13 +2,12 @@ import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
-import { locations, placesUsage, settings } from '../../src/db/schema.js';
+import { locations, settings } from '../../src/db/schema.js';
 import { loadEnv } from '../../src/env.js';
 import { hashPassword } from '../../src/features/admin/auth.js';
 import { createSecretsStore } from '../../src/features/admin/secrets.js';
 import { CATEGORY_PRESETS } from '../../src/features/admin/setup/presets.js';
 import { createCategory, listCategories } from '../../src/features/categories/repo.js';
-import { latestRun } from '../../src/features/locations/findAndRank.js';
 import { makeServiceResolver } from '../../src/services/resolver.js';
 import { adminLogin } from '../helpers/adminLogin.js';
 import { recordingFetch } from '../helpers/recordingFetch.js';
@@ -209,27 +208,33 @@ describe('categories step', () => {
 });
 
 describe('places step without a key', () => {
-  it('offers only manual entry, a note about the key, and 0 of 3 picked per category', async () => {
+  it('shows one card with the pick count, a link to Find places, a note about the key, and manual entry', async () => {
     const { db, get } = await harness();
     createCategory(db, { name: 'Test Dentist', searchTerms: ['emergency dentist'] });
     const res = await get('/admin/setup/places');
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain('0 of 3 picked');
+    expect(html).toContain('0 of 1 category has picks.');
+    expect(html).toContain('No picks yet');
+    expect(html).toMatch(/<a class="btn" href="\/admin\/places\/find">\s*Find &amp; rank places\s*<\/a>/);
     expect(html).toContain('Add a place by hand');
-    expect(html).not.toContain('>Find places</button>');
     expect(html).not.toContain('/admin/setup/places/discover/');
+    expect(html).not.toContain('/admin/locations/');
     expect(html).toMatch(/Google Places key[^<]*<a href="\/admin\/setup\/services">/);
   });
 
-  it('counts approved and warn locations as picked', async () => {
+  it('counts approved and warn locations as picked, per category', async () => {
     const { db, get } = await harness();
     const cat = createCategory(db, { name: 'Test Dentist', searchTerms: ['x'] });
+    createCategory(db, { name: 'Test Vet', searchTerms: ['y'] });
     const at = new Date();
     for (const [name, status] of [['A', 'approved'], ['B', 'warn'], ['C', 'candidate'], ['D', 'rejected']] as const) {
       db.insert(locations).values({ categoryId: cat.id, name, status, createdAt: at, updatedAt: at }).run();
     }
-    expect(await (await get('/admin/setup/places')).text()).toContain('2 of 3 picked');
+    const html = await (await get('/admin/setup/places')).text();
+    expect(html).toContain('1 of 2 categories have picks.');
+    expect(html).toContain('2 of 3 picked');
+    expect(html).toContain('No picks yet');
   });
 
   it('with no categories it points back to the Categories step', async () => {
@@ -238,7 +243,7 @@ describe('places step without a key', () => {
     expect(html).toContain('href="/admin/setup/categories"');
   });
 
-  it('adds a place by hand as a candidate, back on the wizard, then approves it in place', async () => {
+  it('adds a place by hand as a candidate and points to Find places to save it', async () => {
     const { db, post, get } = await harness();
     const cat = createCategory(db, { name: 'Test Dentist', searchTerms: ['x'] });
     const res = await post('/admin/setup/places/manual', {
@@ -248,20 +253,17 @@ describe('places step without a key', () => {
       phone: '801-555-0199',
     });
     expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toMatch(/^\/admin\/setup\/places(\?|#)/);
+    expect(res.headers.get('location')).toBe('/admin/setup/places?added=1');
     const row = db.select().from(locations).get()!;
     expect(row).toMatchObject({ name: 'Corner Dental', status: 'candidate', placeId: null });
 
-    const html = await (await get('/admin/setup/places')).text();
-    expect(html).toContain('Corner Dental');
-    expect(html).toContain(`/admin/locations/${row.id}/approve`);
-    expect(html).toContain('name="return_to" value="/admin/setup/places#test-dentist"');
+    const html = await (await get('/admin/setup/places?added=1')).text();
+    expect(html).toMatch(/role="status"[^>]*>Added\. It is waiting on <a href="\/admin\/places\/find">Find places<\/a>/);
 
-    const approve = await post(`/admin/locations/${row.id}/approve`, { return_to: '/admin/setup/places#test-dentist' });
-    expect(approve.status).toBe(302);
-    expect(approve.headers.get('location')).toBe('/admin/setup/places#test-dentist');
-    expect(db.select().from(locations).get()!.status).toBe('approved');
-    expect(await (await get('/admin/setup/places')).text()).toContain('1 of 3 picked');
+    // It shows on Find places, unranked, ready to save as a pick.
+    const find = await (await get('/admin/places/find')).text();
+    expect(find).toContain('Corner Dental');
+    expect(find).toContain('Not searched yet');
   });
 
   it('manual-add validation errors re-render on the wizard with 400 and an alert', async () => {
@@ -285,100 +287,25 @@ describe('places step without a key', () => {
 });
 
 describe('places step with a Places key', () => {
-  const setup = async (opts: Parameters<typeof harness>[0] = {}) => {
-    const h = await harness({ key: true, ...opts });
-    const cat = createCategory(h.db, { name: 'Test Dentist', searchTerms: ['emergency dentist'] });
-    return { ...h, cat };
-  };
-
-  it('shows a Find places form with data-busy per category', async () => {
-    const { get, cat } = await setup();
+  it('has no per-category discover forms; the old discover route is gone', async () => {
+    const { db, get, post } = await harness({ key: true });
+    const cat = createCategory(db, { name: 'Test Dentist', searchTerms: ['emergency dentist'] });
     const html = await (await get('/admin/setup/places')).text();
-    const form = html.match(new RegExp(`<form[^>]*action="/admin/setup/places/discover/${cat.id}"[^>]*>`))![0];
-    expect(form).toContain('data-busy');
-    expect(html).toContain('>Find places</button>');
+    expect(html).not.toContain('/discover');
+    expect(html).not.toContain('Google Places key');
+    expect(html).toContain('href="/admin/places/find"');
+    expect((await post(`/admin/setup/places/discover/${cat.id}`, {})).status).toBe(404);
   });
 
-  // Stopgap: the button starts a one-category find run in the background and returns to the wizard.
-  it('discovery starts a find run, lands back on the wizard, and the new candidates get Approve/Reject', async () => {
-    const { db, post, get, cat } = await setup();
-    const res = await post(`/admin/setup/places/discover/${cat.id}`, {});
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe('/admin/setup/places#test-dentist');
-    await vi.waitFor(() => expect(latestRun(db)!.status).toBe('done'));
-    expect(latestRun(db)!.progress[String(cat.id)]).toEqual({ state: 'done', found: 2 });
-
-    const rows = db.select().from(locations).all();
-    expect(rows.map((r) => r.name).sort()).toEqual(['Far Dental', 'Near Dental Group']);
-
-    const html = await (await get('/admin/setup/places')).text();
-    expect(html).toContain('Near Dental Group');
-    for (const r of rows) {
-      expect(html).toContain(`/admin/locations/${r.id}/approve`);
-      expect(html).toContain(`/admin/locations/${r.id}/reject`);
-    }
-    expect(html).toContain('name="return_to" value="/admin/setup/places#test-dentist"');
-    expect(html).toContain('0 of 3 picked');
-  });
-
-  it('approving from the wizard returns to the wizard and updates the count', async () => {
-    const { db, post, get, cat } = await setup();
-    await post(`/admin/setup/places/discover/${cat.id}`, {});
-    await vi.waitFor(() => expect(latestRun(db)!.status).toBe('done'));
-    const near = db.select().from(locations).all().find((r) => r.name === 'Near Dental Group')!;
-    const res = await post(`/admin/locations/${near.id}/approve`, { return_to: '/admin/setup/places#test-dentist' });
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe('/admin/setup/places#test-dentist');
-    expect(await (await get('/admin/setup/places')).text()).toContain('1 of 3 picked');
-  });
-
-  it('only whitelisted numeric status params are reflected', async () => {
-    const { get, cat } = await setup();
-    const html = await (
-      await get(`/admin/setup/places?found=${cat.id}&inserted=%3Cscript%3Ealert(1)%3C/script%3E&skipped=1&stopped=evil`)
-    ).text();
-    expect(html).not.toContain('<script>alert');
-    expect(html).not.toContain('evil');
-    expect(html).not.toMatch(/role="status"[^>]*>[^<]*Added/);
-  });
-
-  it('without a home location it explains and links to the Home step', async () => {
-    const { post, db, cat } = await setup({ home: false });
-    const res = await post(`/admin/setup/places/discover/${cat.id}`, {});
-    expect(res.status).toBe(400);
-    const html = await res.text();
-    expect(html).toContain('href="/admin/setup/home"');
-    expect(html).toMatch(/role="alert"/);
-    expect(db.select().from(locations).all()).toHaveLength(0);
-  });
-
-  it('a Google error shows up on the run in plain words, never the key or the raw upstream body', async () => {
-    const fetchFn = (async () =>
-      new Response(`{"error":{"message":"RAW-UPSTREAM-BODY key=${KEY}"}}`, { status: 403 })) as unknown as typeof fetch;
-    const { post, db, cat } = await setup({ fetch: fetchFn });
-    expect((await post(`/admin/setup/places/discover/${cat.id}`, {})).status).toBe(302);
-    await vi.waitFor(() => expect(latestRun(db)!.status).toBe('done'));
-    const progress = latestRun(db)!.progress[String(cat.id)]!;
-    expect(progress.state).toBe('failed');
-    expect(progress.message).toContain('Google rejected this key');
-    expect(JSON.stringify(latestRun(db))).not.toContain('RAW-UPSTREAM-BODY');
-    expect(JSON.stringify(latestRun(db))).not.toContain(KEY);
-  });
-
-  it('an exhausted monthly cap stops the run with a plain message', async () => {
-    const { post, db, cat } = await setup();
-    db.insert(placesUsage).values({ month: now.toISOString().slice(0, 7), calls: 100000, updatedAt: now }).run();
-    expect((await post(`/admin/setup/places/discover/${cat.id}`, {})).status).toBe(302);
-    await vi.waitFor(() => expect(latestRun(db)!.status).toBe('done'));
-    expect(latestRun(db)!.progress[String(cat.id)]).toEqual({
-      state: 'stopped',
-      message: "This month's Places call limit has been reached. Lookups start working again next month.",
-    });
-    expect(db.select().from(locations).all()).toHaveLength(0);
-  });
-
-  it('an unknown category is a 404', async () => {
-    const { post } = await setup();
-    expect((await post('/admin/setup/places/discover/9999', {})).status).toBe(404);
+  it('once every category has a pick, the step is marked done and Save and continue is the primary again', async () => {
+    const { db, get } = await harness({ key: true });
+    const cat = createCategory(db, { name: 'Test Dentist', searchTerms: ['x'] });
+    let html = await (await get('/admin/setup/places')).text();
+    expect(html).toMatch(/<button type="submit" name="go" value="next" class="btn-secondary">/);
+    const at = new Date();
+    db.insert(locations).values({ categoryId: cat.id, name: 'A', status: 'approved', createdAt: at, updatedAt: at }).run();
+    html = await (await get('/admin/setup/places')).text();
+    expect(html).toContain('1 of 1 category has picks.');
+    expect(html).toMatch(/<button type="submit" name="go" value="next">/);
   });
 });

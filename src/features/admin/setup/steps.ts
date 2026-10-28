@@ -43,9 +43,19 @@ export function stepDone(deps: StepDeps, step: Step): boolean {
     }
     case 'categories':
       return countOf(db.select({ n: count() }).from(categories).get()) >= 1;
-    case 'places':
-      // 'warn' rows were approved and are still shown to the family, so they count too.
-      return countOf(db.select({ n: count() }).from(locations).where(inArray(locations.status, ['approved', 'warn'])).get()) >= 1;
+    case 'places': {
+      // Every category has at least one pick. 'warn' rows were approved and still show to the family, so they count.
+      const picked = new Set(
+        db
+          .selectDistinct({ id: locations.categoryId })
+          .from(locations)
+          .where(inArray(locations.status, ['approved', 'warn']))
+          .all()
+          .map((r) => r.id),
+      );
+      const ids = db.select({ id: categories.id }).from(categories).all();
+      return ids.length > 0 && ids.every((c) => picked.has(c.id));
+    }
     case 'protocol':
       return countOf(db.select({ n: count() }).from(protocolVersions).where(eq(protocolVersions.status, 'published')).get()) >= 1;
     case 'done':

@@ -1,52 +1,31 @@
 import type { Hono, Context } from 'hono';
-import type { Child } from 'hono/jsx';
 import { PICKS_PER_CATEGORY } from '../../../domain/ranking.js';
 import { placesOf } from '../../../services/resolver.js';
-import { ReviewQueue } from '../../../web/components/ReviewQueue.js';
-import { getCategory, listCategories } from '../../categories/repo.js';
-import { FindRunActive, NoHomeLocation, findRunDeps, startFindRun } from '../../locations/findAndRank.js';
+import { listCategories } from '../../categories/repo.js';
 import { listLocations } from '../../locations/repo.js';
 import { LocationError, createManualLocation } from '../../locations/service.js';
 import { StepShell, type Notice } from './StepShell.js';
 import { Field, destination, goOf, str, type SetupContext, type Status } from './shared.js';
 
-/** Step 5: find places and approve them in place. */
+/** Step 5: one card that sends the admin to Find places, plus adding a place by hand. */
 export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
   const { deps, db, render, doneSteps, now } = ctx;
 
-  const count = (v: string | undefined): number | undefined => (v !== undefined && /^\d{1,6}$/.test(v) ? Number(v) : undefined);
-  type Found = { categoryId: number; inserted: number; skipped: number; stopped?: 'run' | 'month' };
   type ManualValues = { category_id: string; name: string; address: string; phone: string };
   const EMPTY_MANUAL: ManualValues = { category_id: '', name: '', address: '', phone: '' };
 
   const placesPage = (
     c: Context,
-    opts: { found?: Found; notice?: Notice; manual?: ManualValues; manualError?: { field: string; message: string }; status?: Status } = {},
+    opts: { notice?: Notice; manual?: ManualValues; manualError?: { field: string; message: string }; status?: Status } = {},
   ) => {
     const hasPlaces = placesOf(deps) !== undefined;
     const cats = listCategories(db);
     const all = listLocations(db);
     const manual = opts.manual ?? EMPTY_MANUAL;
     const err = opts.manualError;
-    const findLine = (cat: { id: number; name: string }) => {
-      const f = opts.found;
-      if (!f || f.categoryId !== cat.id) return null;
-      const text =
-        f.inserted === 0
-          ? `No new places found for ${cat.name}${f.skipped > 0 ? ` (${f.skipped} already known)` : ''}.`
-          : `Added ${f.inserted} new ${f.inserted === 1 ? 'place' : 'places'} for ${cat.name}${f.skipped > 0 ? ` (${f.skipped} already known)` : ''}. Approve the ones you want below.`;
-      const stopped = f.stopped
-        ? f.stopped === 'month'
-          ? " The search stopped early because this month's Places call limit was reached."
-          : ' The search stopped early to stay under the per-run call limit.'
-        : '';
-      return (
-        <p class="notice notice-status" role="status">
-          {text}
-          {stopped}
-        </p>
-      );
-    };
+    const picksOf = (id: number) => all.filter((l) => l.categoryId === id && (l.status === 'approved' || l.status === 'warn')).length;
+    const withPicks = cats.filter((cat) => picksOf(cat.id) > 0).length;
+    const allPicked = cats.length > 0 && withPicks === cats.length;
     return render(
       c,
       'places',
@@ -55,64 +34,56 @@ export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
         heading="Find places"
         doneSteps={doneSteps()}
         notice={opts.notice}
+        nextSecondary={!allPicked}
         intro={
           <p>
-            Approve the places your family would actually go to. Only approved places show up on the family site.
+            Pick the places your family would actually go to, {PICKS_PER_CATEGORY} per category. Only the places you save
+            show up on the family site.
           </p>
         }
         before={
           <>
-            {cats.length === 0 && (
+            {cats.length === 0 ? (
               <p>
                 You haven't picked any categories yet. <a href="/admin/setup/categories">Go back to Categories</a>.
               </p>
-            )}
-            {!hasPlaces && (
-              <p class="muted">
-                A Google Places key finds nearby places for you and re-checks their hours every week.{' '}
-                <a href="/admin/setup/services">Add a key in Services</a>.
-              </p>
-            )}
-            {cats.map((cat) => {
-              const mine = all.filter((l) => l.categoryId === cat.id);
-              const approved = mine.filter((l) => l.status === 'approved' || l.status === 'warn');
-              const items = mine
-                .filter((l) => l.status === 'candidate')
-                .map((l) => ({
-                  id: l.id,
-                  title: l.name,
-                  subtitle: [l.distanceMi === null ? null : `${l.distanceMi.toFixed(1)} mi`, l.rating === null ? null : `${l.rating} stars`, l.phone]
-                    .filter((p) => p !== null)
-                    .join(' · '),
-                }));
-              return (
-                <section class="card" id={cat.slug}>
-                  <h2>{cat.name}</h2>
-                  <p>
-                    {approved.length} of {PICKS_PER_CATEGORY} picked
+            ) : (
+              <section class="card places-card" aria-labelledby="places-card-h">
+                <h2 id="places-card-h" class="label">
+                  Places on the family site
+                </h2>
+                <p>
+                  <b>
+                    {withPicks} of {cats.length} {cats.length === 1 ? 'category has' : 'categories have'} picks.
+                  </b>{' '}
+                  {allPicked
+                    ? 'You can rerun the search any time to compare and swap.'
+                    : 'Search every category in one go, then keep the best 3 of each.'}
+                </p>
+                <ul>
+                  {cats.map((cat) => {
+                    const n = picksOf(cat.id);
+                    return (
+                      <li>
+                        <span>{cat.name}</span>
+                        <span class={n === 0 ? 'warn' : 'muted'}>
+                          {n === 0 ? 'No picks yet' : `${n} of ${PICKS_PER_CATEGORY} picked`}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <a class="btn" href="/admin/places/find">
+                  Find &amp; rank places
+                </a>
+                {!hasPlaces && (
+                  <p class="muted">
+                    Searching needs a Google Places key. <a href="/admin/setup/services">Add a key in Services</a>, or add
+                    places by hand below.
                   </p>
-                  {approved.length > 0 && <p class="muted">Approved: {approved.map((l) => l.name).join(', ')}</p>}
-                  {hasPlaces && (
-                    <form method="post" action={`/admin/setup/places/discover/${cat.id}`} data-busy="Searching nearby…">
-                      <button type="submit" class="btn-secondary">
-                        Find places
-                      </button>
-                    </form>
-                  )}
-                  {findLine(cat)}
-                  {items.length > 0 && (
-                    <ReviewQueue
-                      title={`Waiting for your decision: ${cat.name}`}
-                      empty=""
-                      items={items}
-                      approveAction={(id) => `/admin/locations/${id}/approve`}
-                      rejectAction={(id) => `/admin/locations/${id}/reject`}
-                      returnTo={`/admin/setup/places#${cat.slug}`}
-                    />
-                  )}
-                </section>
-              );
-            })}
+                )}
+              </section>
+            )}
             {cats.length > 0 && (
               <form method="post" action="/admin/setup/places/manual" class="admin-form">
                 <fieldset>
@@ -167,61 +138,23 @@ export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
   };
 
   app.get('/places', (c) => {
-    const q = c.req.query();
-    const categoryId = count(q['found']);
-    const inserted = count(q['inserted']);
-    const skipped = count(q['skipped']);
-    const found: Found | undefined =
-      categoryId !== undefined && inserted !== undefined && getCategory(db, categoryId)
+    const notice: Notice | undefined =
+      c.req.query('added') === '1'
         ? {
-            categoryId,
-            inserted,
-            skipped: skipped ?? 0,
-            ...(q['stopped'] === 'run' || q['stopped'] === 'month' ? { stopped: q['stopped'] } : {}),
+            kind: 'status',
+            text: (
+              <>
+                Added. It is waiting on <a href="/admin/places/find">Find places</a>, where you can save it as a pick.
+              </>
+            ),
           }
         : undefined;
-    const notice: Notice | undefined =
-      q['added'] === '1'
-        ? { kind: 'status', text: 'Added. It is waiting for your decision below; approve it to use it.' }
-        : undefined;
-    return placesPage(c, { ...(found ? { found } : {}), ...(notice ? { notice } : {}) });
+    return placesPage(c, notice ? { notice } : {});
   });
 
   app.post('/places', async (c) => {
     const body = await c.req.parseBody();
     return c.redirect(destination('places', goOf(body['go'])), 302);
-  });
-
-  app.post('/places/discover/:id', async (c) => {
-    const id = Number(c.req.param('id'));
-    const category = getCategory(db, id);
-    if (!category) return c.notFound();
-    const places = placesOf(deps);
-    const fail = (text: Child, status: Status) => placesPage(c, { notice: { kind: 'alert', text }, status });
-    if (!places) {
-      return fail(
-        <>
-          Add a Google Places key in <a href="/admin/setup/services">Setup → Services</a> to find places, or add one by hand.
-        </>,
-        400,
-      );
-    }
-    // Stopgap until the Find places page replaces this button: start a run for this one category and come back.
-    // The run carries on in the background; one already running is left to finish.
-    try {
-      startFindRun(db, [id], findRunDeps(deps, places));
-    } catch (e) {
-      if (e instanceof NoHomeLocation) {
-        return fail(
-          <>
-            Set your home location first, so we know where to look. <a href="/admin/setup/home">Go to the Home step</a>.
-          </>,
-          400,
-        );
-      }
-      if (!(e instanceof FindRunActive)) throw e;
-    }
-    return c.redirect(`/admin/setup/places#${category.slug}`, 302);
   });
 
   app.post('/places/manual', async (c) => {
@@ -232,19 +165,17 @@ export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
       address: str(body['address']),
       phone: str(body['phone']),
     };
-    let created;
     try {
-      created = createManualLocation(
+      createManualLocation(
         db,
         { categoryId: Number(manual.category_id), name: manual.name, address: manual.address, phone: manual.phone },
-        (now)(),
+        now(),
       );
     } catch (e) {
       if (!(e instanceof LocationError)) throw e;
       const field = e.field === 'name' ? 'manual_name' : 'manual_category';
       return placesPage(c, { manual, manualError: { field, message: e.message }, status: 400 });
     }
-    const slug = getCategory(db, created.categoryId)?.slug;
-    return c.redirect(`/admin/setup/places?added=1${slug ? `#${slug}` : ''}`, 302);
+    return c.redirect('/admin/setup/places?added=1', 302);
   });
 }

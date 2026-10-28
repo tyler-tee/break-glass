@@ -67,6 +67,12 @@ describe('wizard step model', () => {
     expect(stepDone(deps, 'places')).toBe(true);
     expect(resumeTarget(deps)).toBe('/admin/setup/protocol');
 
+    // Places is done only when every category has a pick.
+    const empty = db.insert(categories).values({ name: 'Empty', slug: 'empty', searchTerms: ['x'] }).returning().get();
+    expect(stepDone(deps, 'places')).toBe(false);
+    expect(resumeTarget(deps)).toBe('/admin/setup/places');
+    db.delete(categories).where(eq(categories.id, empty.id)).run();
+
     const p = db.insert(protocols).values({ slug: 'cut', title: 'Cut' }).returning().get();
     db.insert(protocolVersions)
       .values({ protocolId: p.id, version: 1, status: 'published', bodyMd: '# x', createdAt: new Date() })
