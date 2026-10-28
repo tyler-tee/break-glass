@@ -1,7 +1,7 @@
 import { and, desc, eq, max } from 'drizzle-orm';
 import type { Db, DbOrTx } from '../../db/client.js';
 import { protocolSources, protocolVersions, protocols } from '../../db/schema.js';
-import type { ProtocolStatus } from '../../domain/types.js';
+import type { Area, ProtocolStatus } from '../../domain/types.js';
 
 export type Protocol = typeof protocols.$inferSelect;
 export type ProtocolVersion = typeof protocolVersions.$inferSelect;
@@ -100,12 +100,16 @@ export function nextVersionNumber(db: DbOrTx, protocolId: number): number {
 
 export type PublishedProtocol = { protocol: Protocol; version: ProtocolVersion; sources: ProtocolSource[] };
 
-export function getPublished(db: DbOrTx): PublishedProtocol[] {
+export function getPublished(db: DbOrTx, opts: { area?: Area } = {}): PublishedProtocol[] {
   return db
     .select({ protocol: protocols, version: protocolVersions })
     .from(protocolVersions)
     .innerJoin(protocols, eq(protocols.id, protocolVersions.protocolId))
-    .where(eq(protocolVersions.status, 'published'))
+    .where(
+      opts.area
+        ? and(eq(protocolVersions.status, 'published'), eq(protocols.area, opts.area))
+        : eq(protocolVersions.status, 'published'),
+    )
     .orderBy(protocols.title)
     .all()
     .map(({ protocol, version }) => ({ protocol, version, sources: listSources(db, version.id) }));

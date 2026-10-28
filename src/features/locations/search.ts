@@ -3,7 +3,7 @@ import type { Db } from '../../db/client.js';
 import type { categories } from '../../db/schema.js';
 import { getCategoryBySlug } from '../categories/repo.js';
 import { describeHours, isOpenNow, type HoursStatus } from '../../domain/hours.js';
-import type { FieldChange } from '../../domain/types.js';
+import type { Area, FieldChange } from '../../domain/types.js';
 import {
   getVisibleRow,
   listOpenChanges,
@@ -48,7 +48,7 @@ export function sortForFamily(views: LocationView[]): LocationView[] {
 
 const escapeLike = (q: string) => q.replace(/[\\%_]/g, (c) => `\\${c}`);
 
-export function searchLocations(db: Db, q: string, now: Date, tz: string): CategoryGroup[] {
+export function searchLocations(db: Db, q: string, now: Date, tz: string, opts: { area?: Area } = {}): CategoryGroup[] {
   const term = q.trim();
   if (!term) return [];
   const pattern = `%${escapeLike(term.toLowerCase())}%`;
@@ -73,14 +73,17 @@ export function searchLocations(db: Db, q: string, now: Date, tz: string): Categ
 
   return groupRows(
     db,
-    listVisibleRows(db).filter((r) => matchedCategoryIds.has(r.categoryId) || matchedLocationIds.has(r.id)),
+    listVisibleRows(db)
+      .filter((r) => !opts.area || r.category.area === opts.area)
+      .filter((r) => matchedCategoryIds.has(r.categoryId) || matchedLocationIds.has(r.id)),
     now,
     tz,
   );
 }
 
-export function listVisibleGrouped(db: Db, now: Date, tz: string): CategoryGroup[] {
-  return groupRows(db, listVisibleRows(db), now, tz);
+export function listVisibleGrouped(db: Db, now: Date, tz: string, opts: { area?: Area } = {}): CategoryGroup[] {
+  const rows = listVisibleRows(db).filter((r) => !opts.area || r.category.area === opts.area);
+  return groupRows(db, rows, now, tz);
 }
 
 function groupRows(db: Db, rows: VisibleLocationRow[], now: Date, tz: string): CategoryGroup[] {

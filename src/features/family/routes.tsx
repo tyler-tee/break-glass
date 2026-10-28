@@ -28,7 +28,7 @@ export function familyRoutes(deps: AppDeps): Hono {
     return /\d/.test(stored) ? stored : '911';
   };
   // Creation order, so the household's first categories (the presets) lead the grid.
-  const orderedCategories = () => [...listCategories(db)].sort((a, b) => a.id - b.id);
+  const orderedCategories = () => [...listCategories(db, { area: 'health' })].sort((a, b) => a.id - b.id);
 
   app.get('/', (c) => {
     // Until someone claims the install there is nothing for the family yet; point at /setup instead.
@@ -46,7 +46,7 @@ export function familyRoutes(deps: AppDeps): Hono {
       );
     }
     const number = emergencyNumber();
-    const groups = new Map(listVisibleGrouped(db, now(), tz()).map((g) => [g.category.id, forFamily(g.locations)]));
+    const groups = new Map(listVisibleGrouped(db, now(), tz(), { area: 'health' }).map((g) => [g.category.id, forFamily(g.locations)]));
     const cats = orderedCategories();
     const shown = cats.slice(0, MAX_TILES);
     const verified = oldestVerified([...groups.values()].flat());
@@ -106,7 +106,7 @@ export function familyRoutes(deps: AppDeps): Hono {
 
   app.get('/search', (c) => {
     const q = (c.req.query('q') ?? '').trim();
-    const groups = q ? searchLocations(db, q, now(), tz()) : [];
+    const groups = q ? searchLocations(db, q, now(), tz(), { area: 'health' }) : [];
     const exact = groups.find((g) => g.category.name.toLowerCase() === q.toLowerCase());
     const ordered = exact ? [exact, ...groups.filter((g) => g !== exact)] : groups;
     return resultsPage(c, q || 'Search', q, ordered.map((g) => ({ ...g, locations: forFamily(g.locations) })));
@@ -114,7 +114,7 @@ export function familyRoutes(deps: AppDeps): Hono {
 
   app.get('/c/:slug', (c) => {
     const category = getCategoryBySlug(db, c.req.param('slug'));
-    if (!category) return notFound(c, 'We could not find that category.');
+    if (!category || category.area !== 'health') return notFound(c, 'We could not find that category.');
     const views = forFamily(listVisibleByCategory(db, category.slug, now(), tz()));
     return resultsPage(c, category.name, category.name, [{ category, locations: views }]);
   });
@@ -123,12 +123,12 @@ export function familyRoutes(deps: AppDeps): Hono {
   app.get('/l/:id', (c) => {
     const id = Number(c.req.param('id'));
     const view = Number.isInteger(id) ? getVisibleLocation(db, id, now(), tz()) : null;
-    if (!view) return notFound(c, 'We could not find that place.');
+    if (!view || view.category.area !== 'health') return notFound(c, 'We could not find that place.');
     return c.redirect(`/c/${view.category.slug}#place-${view.id}`, 302);
   });
 
   app.get('/categories', (c) => {
-    const counts = new Map(listVisibleGrouped(db, now(), tz()).map((g) => [g.category.id, forFamily(g.locations).length]));
+    const counts = new Map(listVisibleGrouped(db, now(), tz(), { area: 'health' }).map((g) => [g.category.id, forFamily(g.locations).length]));
     return page(
       c,
       'All categories',
@@ -145,7 +145,7 @@ export function familyRoutes(deps: AppDeps): Hono {
   app.get('/emergency', (c) => {
     const number = emergencyNumber();
     const q = (c.req.query('q') ?? '').trim();
-    const all = getPublished(db);
+    const all = getPublished(db, { area: 'health' });
     const needle = q.toLowerCase();
     const items = needle
       ? all.filter(({ protocol: p }) =>
@@ -198,11 +198,11 @@ export function familyRoutes(deps: AppDeps): Hono {
 
   app.get('/emergency/:slug', (c) => {
     const found = getPublishedBySlug(db, c.req.param('slug'));
-    if (!found) return notFound(c, 'We could not find that protocol.', '/emergency', 'Back to protocols');
+    if (!found || found.protocol.area !== 'health') return notFound(c, 'We could not find that protocol.', '/emergency', 'Back to protocols');
     const { protocol, version, sources } = found;
     const number = emergencyNumber();
     const tag = protocol.tags?.[0];
-    const category = categoryForTags(listCategories(db), protocol.tags);
+    const category = categoryForTags(listCategories(db), protocol.tags, protocol.area);
     const chunks = splitSopSections(version.bodyMd);
     const body = (heading: string) => chunks.find((ch) => ch.heading === heading);
     const md = (chunkMd: string) => raw(renderMarkdown(withoutHeading(chunkMd)));
@@ -302,7 +302,7 @@ export function familyRoutes(deps: AppDeps): Hono {
             <p class="empty">{q ? `No vetted providers match “${q}”.` : 'Type what you need, like “dentist”.'} Pick a category instead:</p>
             <CategoryList
               cats={orderedCategories()}
-              counts={new Map(listVisibleGrouped(db, now(), tz()).map((g) => [g.category.id, forFamily(g.locations).length]))}
+              counts={new Map(listVisibleGrouped(db, now(), tz(), { area: 'health' }).map((g) => [g.category.id, forFamily(g.locations).length]))}
             />
           </>
         ) : (

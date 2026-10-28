@@ -1,3 +1,5 @@
+export const AREAS = ['health', 'home'] as const;
+export type Area = (typeof AREAS)[number];
 export type LocationStatus = 'candidate' | 'approved' | 'warn' | 'rejected';
 export type HoursNeed = 'overnight' | 'daytime';
 export type RankVerdict = 'pick' | 'backup' | 'avoid';

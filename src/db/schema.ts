@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type {
+  Area,
   BusinessStatus,
   FindRunProgress,
   FindRunStatus,
@@ -41,8 +42,13 @@ export const categories = sqliteTable(
     searchTerms: text('search_terms', { mode: 'json' }).$type<string[]>().notNull(),
     // Whether the family would go only in the daytime or at any hour, overnight included.
     hoursNeed: text('hours_need').$type<HoursNeed>().notNull().default('overnight'),
+    // Which family section the category belongs to; 'home' is not shown on the family side yet.
+    area: text('area').$type<Area>().notNull().default('health'),
   },
-  (t) => [check('categories_hours_need_check', sql`${t.hoursNeed} in ('overnight','daytime')`)],
+  (t) => [
+    check('categories_hours_need_check', sql`${t.hoursNeed} in ('overnight','daytime')`),
+    check('categories_area_check', sql`${t.area} in ('health','home')`),
+  ],
 );
 
 export const locations = sqliteTable(
@@ -130,14 +136,19 @@ export const locationChanges = sqliteTable(
   (t) => [index('location_changes_location_resolved_idx').on(t.locationId, t.resolvedAt)],
 );
 
-export const protocols = sqliteTable('protocols', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  slug: text('slug').notNull().unique(),
-  title: text('title').notNull(),
-  tags: text('tags', { mode: 'json' }).$type<string[]>(),
-  needsRereview: integer('needs_rereview', { mode: 'boolean' }).notNull().default(false),
-  rereviewReason: text('rereview_reason'),
-});
+export const protocols = sqliteTable(
+  'protocols',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    slug: text('slug').notNull().unique(),
+    title: text('title').notNull(),
+    tags: text('tags', { mode: 'json' }).$type<string[]>(),
+    needsRereview: integer('needs_rereview', { mode: 'boolean' }).notNull().default(false),
+    rereviewReason: text('rereview_reason'),
+    area: text('area').$type<Area>().notNull().default('health'),
+  },
+  (t) => [check('protocols_area_check', sql`${t.area} in ('health','home')`)],
+);
 
 export const protocolVersions = sqliteTable(
   'protocol_versions',

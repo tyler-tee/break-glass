@@ -42,7 +42,7 @@ export function toApiLocation(v: LocationView) {
 type CategoryRow = ReturnType<typeof listCategories>[number];
 
 export function toApiCategory(c: CategoryRow) {
-  return { id: c.id, name: c.name, slug: c.slug, searchTerms: c.searchTerms, hoursNeed: c.hoursNeed };
+  return { id: c.id, name: c.name, slug: c.slug, searchTerms: c.searchTerms, hoursNeed: c.hoursNeed, area: c.area };
 }
 
 const toApiProtocol = ({ protocol, version }: PublishedProtocol) => ({
@@ -50,6 +50,7 @@ const toApiProtocol = ({ protocol, version }: PublishedProtocol) => ({
   slug: protocol.slug,
   title: protocol.title,
   tags: protocol.tags ?? [],
+  area: protocol.area,
   needsRereview: protocol.needsRereview,
   rereviewReason: protocol.rereviewReason,
   version: { number: version.version, publishedAt: version.reviewedAt ? version.reviewedAt.toISOString() : null },

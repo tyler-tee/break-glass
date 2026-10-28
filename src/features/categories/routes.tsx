@@ -37,6 +37,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
               <th>Slug</th>
               <th>Search terms</th>
               <th>Hours</th>
+              <th>Area</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -47,6 +48,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
                 <td>{cat.slug}</td>
                 <td>{cat.searchTerms.join(', ')}</td>
                 <td>{cat.hoursNeed === 'daytime' ? 'Daytime' : 'Overnight'}</td>
+                <td>{cat.area === 'home' ? 'Home' : 'Health'}</td>
                 <td class="row-actions">
                   <a href={`/admin/categories/${cat.id}/edit`}>Edit</a>
                   <form method="post" action={`/admin/categories/${cat.id}/delete`}>

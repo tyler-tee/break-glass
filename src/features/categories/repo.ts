@@ -1,15 +1,15 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import { categories, locations } from '../../db/schema.js';
 import { slugify } from '../../domain/slug.js';
-import type { HoursNeed } from '../../domain/types.js';
+import { AREAS, type Area, type HoursNeed } from '../../domain/types.js';
 
 export type Category = typeof categories.$inferSelect;
 
 export type CategoryErrorCode = 'duplicate' | 'in_use' | 'invalid' | 'not_found';
 
 /** The form field a validation error belongs to, so callers need not parse the message. */
-export type CategoryField = 'name' | 'search_terms' | 'hours_need';
+export type CategoryField = 'name' | 'search_terms' | 'hours_need' | 'area';
 
 export class CategoryError extends Error {
   constructor(
@@ -22,8 +22,13 @@ export class CategoryError extends Error {
   }
 }
 
-export function listCategories(db: Db): Category[] {
-  return db.select().from(categories).orderBy(categories.name).all();
+export function listCategories(db: Db, opts: { area?: Area } = {}): Category[] {
+  return db
+    .select()
+    .from(categories)
+    .where(opts.area ? eq(categories.area, opts.area) : undefined)
+    .orderBy(categories.name)
+    .all();
 }
 
 export function getCategory(db: Db, id: number): Category | null {
@@ -38,6 +43,7 @@ type CategoryFields = {
   name: string;
   searchTerms: string[];
   hoursNeed: HoursNeed;
+  area: Area;
 };
 
 function validate(db: Db, fields: CategoryFields, selfId?: number): CategoryFields & { slug: string } {
@@ -50,17 +56,21 @@ function validate(db: Db, fields: CategoryFields, selfId?: number): CategoryFiel
   if (fields.hoursNeed !== 'overnight' && fields.hoursNeed !== 'daytime') {
     throw new CategoryError('invalid', 'Choose when you would go', 'hours_need');
   }
+  if (!(AREAS as readonly string[]).includes(fields.area)) {
+    throw new CategoryError('invalid', 'Choose health or home', 'area');
+  }
   const clash = listCategories(db).find(
     (c) => c.id !== selfId && (c.slug === slug || c.name.toLowerCase() === name.toLowerCase()),
   );
   if (clash) throw new CategoryError('duplicate', `A category named "${clash.name}" already exists`, 'name');
-  return { name, slug, searchTerms, hoursNeed: fields.hoursNeed };
+  return { name, slug, searchTerms, hoursNeed: fields.hoursNeed, area: fields.area };
 }
 
-export function createCategory(db: Db, input: { name: string; searchTerms: string[]; hoursNeed?: HoursNeed }): Category {
+export function createCategory(db: Db, input: { name: string; searchTerms: string[]; hoursNeed?: HoursNeed; area?: Area }): Category {
   const values = validate(db, {
     ...input,
     hoursNeed: input.hoursNeed ?? 'overnight',
+    area: input.area ?? 'health',
   });
   return db.insert(categories).values(values).returning().get();
 }
@@ -68,7 +78,7 @@ export function createCategory(db: Db, input: { name: string; searchTerms: strin
 export function updateCategory(
   db: Db,
   id: number,
-  patch: Partial<{ name: string; searchTerms: string[]; hoursNeed: HoursNeed }>,
+  patch: Partial<{ name: string; searchTerms: string[]; hoursNeed: HoursNeed; area: Area }>,
 ): Category {
   const current = getCategory(db, id);
   if (!current) throw new CategoryError('not_found', 'Category not found');
@@ -78,6 +88,7 @@ export function updateCategory(
       name: patch.name ?? current.name,
       searchTerms: patch.searchTerms ?? current.searchTerms,
       hoursNeed: patch.hoursNeed ?? current.hoursNeed,
+      area: patch.area ?? current.area,
     },
     id,
   );

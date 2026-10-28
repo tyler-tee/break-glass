@@ -43,6 +43,13 @@
       "when": 1793195747490,
       "tag": "0005_per_category_place",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793200608780,
+      "tag": "0006_area",
+      "breakpoints": true
     }
   ]
 }

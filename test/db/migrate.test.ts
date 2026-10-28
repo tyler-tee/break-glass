@@ -120,4 +120,21 @@ describe('migrations', () => {
     expect(indexes).not.toContainEqual({ name: 'locations_place_id_unique' });
     expect(indexes).toContainEqual({ name: 'locations_category_place_idx' });
   });
+
+  it('0006 marks existing categories and protocols as health and checks the area', () => {
+    const { sqlite, run } = migrated([...UP_TO_0003, '0004_wild_thunderbird', '0005_per_category_place']);
+    sqlite.prepare(`insert into categories (name, slug, search_terms) values ('Dentist', 'dentist', '["x"]')`).run();
+    sqlite.prepare("insert into protocols (slug, title) values ('cut', 'Cut')").run();
+
+    run('0006_area');
+
+    expect(sqlite.prepare('select slug, area from categories').all()).toEqual([{ slug: 'dentist', area: 'health' }]);
+    expect(sqlite.prepare('select slug, area from protocols').all()).toEqual([{ slug: 'cut', area: 'health' }]);
+    sqlite.prepare(`insert into categories (name, slug, search_terms, area) values ('Plumber', 'plumber', '["x"]', 'home')`).run();
+    expect(() =>
+      sqlite.prepare(`insert into categories (name, slug, search_terms, area) values ('G', 'g', '["x"]', 'garden')`).run(),
+    ).toThrow(/CHECK/);
+    expect(() => sqlite.prepare("update protocols set area = 'garden'").run()).toThrow(/CHECK/);
+    expect(sqlite.prepare('pragma foreign_key_check').all()).toEqual([]);
+  });
 });
