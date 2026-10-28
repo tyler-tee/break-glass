@@ -18,6 +18,7 @@ import {
   placeDetails,
   type PlacesDeps,
 } from '../services/places/client.js';
+import type { PlaceDetails } from '../services/places/types.js';
 
 export type RefreshReport = {
   checked: number;
@@ -55,6 +56,16 @@ export async function refreshLocations(
   };
   const finish = (): RefreshReport => ({ ...report, callsUsed: places.budget.used });
 
+  // A place may be picked in more than one category; fetch its details once per run.
+  const fetched = new Map<string, PlaceDetails>();
+  const detailsOf = async (placeId: string): Promise<PlaceDetails> => {
+    const hit = fetched.get(placeId);
+    if (hit) return hit;
+    const details = await placeDetails(placeId, places);
+    fetched.set(placeId, details);
+    return details;
+  };
+
   for (const row of listRefreshable(db)) {
     let counted = false;
     try {
@@ -62,7 +73,7 @@ export async function refreshLocations(
       let newHash: string | undefined;
       const prevSnapshot = latestSnapshot(db, row.id);
       try {
-        const details = await placeDetails(row.placeId!, places);
+        const details = await detailsOf(row.placeId!);
         // LLM note fields are carried forward from the row unless extraction returns something.
         let tracked: TrackedFields = {
           ...detailsToTracked(details),

@@ -47,14 +47,20 @@ describe('migrations', () => {
     ]);
   });
 
-  it('0004 keeps existing categories and sets hours_need from the slug', () => {
+  const migrated = (files: string[]) => {
     const sqlite = new Database(':memory:');
     sqlite.pragma('foreign_keys = ON');
     const run = (file: string) => {
       const text = readFileSync(new URL(`../../drizzle/${file}.sql`, import.meta.url), 'utf8');
       for (const stmt of text.split('--> statement-breakpoint')) sqlite.exec(stmt);
     };
-    for (const f of ['0000_keen_tusk', '0001_minor_odin', '0002_groovy_moonstone', '0003_outgoing_zuras']) run(f);
+    for (const f of files) run(f);
+    return { sqlite, run };
+  };
+  const UP_TO_0003 = ['0000_keen_tusk', '0001_minor_odin', '0002_groovy_moonstone', '0003_outgoing_zuras'];
+
+  it('0004 keeps existing categories and sets hours_need from the slug', () => {
+    const { sqlite, run } = migrated(UP_TO_0003);
     const ins = sqlite.prepare(`insert into categories (name, slug, search_terms, target_count) values (?, ?, '["x"]', 4)`);
     for (const [name, slug] of [['Urgent care', 'urgent-care'], ['Pediatrician', 'pediatrician'], ['Dentist', 'dentist']]) ins.run(name, slug);
     sqlite
@@ -74,5 +80,44 @@ describe('migrations', () => {
     ]);
     expect(() => sqlite.prepare("update categories set hours_need = 'never'").run()).toThrow(/CHECK/);
     expect(() => sqlite.prepare("update locations set rank_verdict = 'best'").run()).toThrow(/CHECK/);
+  });
+
+  it('0005 makes place_id unique per category and keeps locations and their history', () => {
+    const { sqlite, run } = migrated([...UP_TO_0003, '0004_wild_thunderbird']);
+    sqlite.prepare(`insert into categories (name, slug, search_terms) values ('ER', 'er', '["x"]'), ('Kids ER', 'kids-er', '["x"]')`).run();
+    sqlite
+      .prepare("insert into locations (category_id, place_id, name, status, created_at, updated_at) values (1, 'ChIJa', 'A', 'approved', 1, 1)")
+      .run();
+    sqlite.prepare("insert into location_snapshots (location_id, fetched_at, payload, hash) values (1, 1, '{}', 'h')").run();
+    sqlite
+      .prepare("insert into location_changes (location_id, detected_at, field, old_value, new_value) values (1, 2, 'phone', 'a', 'b')")
+      .run();
+    // Before 0005 the unique index is global.
+    const sameInKids = "insert into locations (category_id, place_id, name, created_at, updated_at) values (2, 'ChIJa', 'A', 1, 1)";
+    expect(() => sqlite.prepare(sameInKids).run()).toThrow(/UNIQUE/);
+
+    run('0005_per_category_place');
+
+    expect(sqlite.prepare('select id, place_id, status from locations').all()).toEqual([
+      { id: 1, place_id: 'ChIJa', status: 'approved' },
+    ]);
+    expect(sqlite.prepare('select location_id from location_snapshots').all()).toEqual([{ location_id: 1 }]);
+    expect(sqlite.prepare('select location_id, field from location_changes').all()).toEqual([
+      { location_id: 1, field: 'phone' },
+    ]);
+    expect(sqlite.prepare('pragma foreign_key_check').all()).toEqual([]);
+    sqlite.prepare(sameInKids).run();
+    expect(() =>
+      sqlite
+        .prepare("insert into locations (category_id, place_id, name, created_at, updated_at) values (1, 'ChIJa', 'A2', 1, 1)")
+        .run(),
+    ).toThrow(/UNIQUE/);
+    // Manual places have no place id, and any number of them may share a category.
+    const manual = sqlite.prepare("insert into locations (category_id, name, created_at, updated_at) values (1, 'Manual', 1, 1)");
+    manual.run();
+    manual.run();
+    const indexes = sqlite.prepare("select name from sqlite_master where type = 'index' and tbl_name = 'locations'").all();
+    expect(indexes).not.toContainEqual({ name: 'locations_place_id_unique' });
+    expect(indexes).toContainEqual({ name: 'locations_category_place_idx' });
   });
 });

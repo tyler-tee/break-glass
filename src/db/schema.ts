@@ -52,7 +52,8 @@ export const locations = sqliteTable(
     categoryId: integer('category_id')
       .notNull()
       .references(() => categories.id),
-    placeId: text('place_id').unique(),
+    // Unique per category, not globally: one hospital can be both an ER pick and a Children's ER pick.
+    placeId: text('place_id'),
     name: text('name').notNull(),
     address: text('address'),
     phone: text('phone'),
@@ -88,6 +89,7 @@ export const locations = sqliteTable(
   },
   (t) => [
     index('locations_category_status_idx').on(t.categoryId, t.status),
+    uniqueIndex('locations_category_place_idx').on(t.categoryId, t.placeId),
     check('locations_status_check', sql`${t.status} in ('candidate','approved','warn','rejected')`),
     check(
       'locations_business_status_check',

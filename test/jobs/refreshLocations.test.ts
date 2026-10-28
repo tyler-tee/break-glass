@@ -108,6 +108,16 @@ describe('refreshLocations', () => {
     expect(changesOf(id)).toHaveLength(0);
   });
 
+  it('a place picked in two categories is fetched once and both rows are checked', async () => {
+    const id = addLocation({ name: 'Near Dental Group', placeId: 'ChIJnear', phone: '(801) 555-0100' }, nearPayload());
+    const other = createCategory(db, { name: 'Kids Dentist', searchTerms: ['kids dentist'] }).id;
+    const twin = addLocation({ categoryId: other, name: 'Near Dental Group', placeId: 'ChIJnear' }, nearPayload());
+    const report = await refreshLocations(db, deps());
+    expect(report).toMatchObject({ checked: 2, unchanged: 2, callsUsed: 1 });
+    expect(rowOf(id).lastVerifiedAt).toEqual(now);
+    expect(rowOf(twin).lastVerifiedAt).toEqual(now);
+  });
+
   it('404 increments failures, status unchanged', async () => {
     const id = addLocation({ name: 'Gone Dental', placeId: 'ChIJgone' }, nearPayload());
     const first = await refreshLocations(db, deps());
