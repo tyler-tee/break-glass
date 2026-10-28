@@ -1,17 +1,21 @@
 import type { Hono, Context } from 'hono';
-import type { Child } from 'hono/jsx';
-import { SettingsValidationError, getSettings, updateSettings } from '../settingsRepo.js';
+import {
+  EMERGENCY_NUMBER_MAX,
+  HOUSEHOLD_NAME_MAX,
+  SettingsValidationError,
+  emergencyNumberError,
+  getSettings,
+  householdNameError,
+  updateSettings,
+} from '../settingsRepo.js';
 import { StepShell } from './StepShell.js';
-import { Field, destination, firstError, goOf, one, many, str, type Errors, type SetupContext, type Status } from './shared.js';
+import { Field, destination, firstError, goOf, str, type Errors, type SetupContext, type Status } from './shared.js';
 
 const DEFAULT_HOUSEHOLD = 'Our household';
-const HOUSEHOLD_MAX = 60;
-const EMERGENCY_MAX = 20;
 
 /** Step 1: household name and emergency number. */
 export function registerWelcomeStep(app: Hono, ctx: SetupContext): void {
   const { db, render, doneSteps } = ctx;
-  // ---- Step 1: Welcome / household -------------------------------------------------------------
 
   const welcomePage = (c: Context, values: { name: string; number: string }, errors: Errors = {}, status: Status = 200) => {
     const focus = firstError(errors, ['household_name', 'emergency_number']);
@@ -33,7 +37,7 @@ export function registerWelcomeStep(app: Hono, ctx: SetupContext): void {
               id="household_name"
               name="household_name"
               value={values.name}
-              maxlength={HOUSEHOLD_MAX}
+              maxlength={HOUSEHOLD_NAME_MAX}
               autocomplete="off"
               aria-describedby={describedBy}
               aria-invalid={invalid ? 'true' : undefined}
@@ -51,7 +55,7 @@ export function registerWelcomeStep(app: Hono, ctx: SetupContext): void {
               name="emergency_number"
               type="tel"
               value={values.number}
-              maxlength={EMERGENCY_MAX}
+              maxlength={EMERGENCY_NUMBER_MAX}
               autocomplete="off"
               aria-describedby={describedBy}
               aria-invalid={invalid ? 'true' : undefined}
@@ -75,16 +79,18 @@ export function registerWelcomeStep(app: Hono, ctx: SetupContext): void {
     const name = str(body['household_name']).trim() || DEFAULT_HOUSEHOLD;
     const number = str(body['emergency_number']).trim();
     const errors: Errors = {};
-    if (name.length > HOUSEHOLD_MAX) errors['household_name'] = `Keep the name to ${HOUSEHOLD_MAX} characters or fewer.`;
-    if (number === '') errors['emergency_number'] = 'Enter the number to call in an emergency (911 in the US).';
-    else if (!/\d/.test(number)) errors['emergency_number'] = 'The emergency number needs at least one digit, like 911.';
-    else if (!/^[0-9+\-() ]+$/.test(number)) errors['emergency_number'] = 'Use only digits, spaces, and + - ( ).';
-    else if (number.length > EMERGENCY_MAX) errors['emergency_number'] = `Keep the number to ${EMERGENCY_MAX} characters or fewer.`;
+    const nameError = householdNameError(name);
+    const numberError = emergencyNumberError(number);
+    if (nameError) errors['household_name'] = nameError;
+    if (numberError) errors['emergency_number'] = numberError;
     if (Object.keys(errors).length > 0) return welcomePage(c, { name, number }, errors, 400);
     try {
       updateSettings(db, { householdName: name, emergencyNumber: number });
     } catch (e) {
       if (!(e instanceof SettingsValidationError)) throw e;
+      if (e.field === 'household_name' || e.field === 'emergency_number') {
+        return welcomePage(c, { name, number }, { [e.field]: e.message }, 400);
+      }
       // updateSettings re-validates the whole row; a bad value saved elsewhere must not turn into a 500 here.
       return welcomePage(
         c,

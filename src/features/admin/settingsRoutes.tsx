@@ -7,10 +7,22 @@ import { placesOf } from '../../services/resolver.js';
 import { page } from '../../web/Layout.js';
 import { budgetExhaustedPage, placesErrorPage } from '../../web/placesErrorPage.js';
 import { createSession, hashPassword, sessionKey, verifyPassword } from './auth.js';
-import { SettingsValidationError, getSettings, updateSettings, type Settings } from './settingsRepo.js';
+import {
+  EMERGENCY_NUMBER_MAX,
+  HOUSEHOLD_NAME_MAX,
+  SettingsValidationError,
+  getSettings,
+  updateSettings,
+  type Settings,
+  type SettingsPatch,
+} from './settingsRepo.js';
+import { Field } from './setup/shared.js';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const optNumber = (v: unknown): number | null => (str(v).trim() === '' ? null : Number(str(v)));
+/** Settings errors shown beside their own field (the rest use the alert at the top of the page). */
+type FieldErrors = Partial<Record<'household_name' | 'emergency_number', string>>;
+const isFieldError = (f: string): f is keyof FieldErrors => f === 'household_name' || f === 'emergency_number';
 
 export function settingsRoutes(deps: ResolvedAppDeps): Hono {
   const { secrets } = deps;
@@ -24,9 +36,11 @@ export function settingsRoutes(deps: ResolvedAppDeps): Hono {
   const formPage = (
     c: Parameters<typeof page>[0],
     s: Settings,
-    opts: { saved?: boolean; error?: Child; pwError?: PwError; status?: 200 | 400 } = {},
-  ) =>
-    page(
+    opts: { saved?: boolean; error?: Child; fieldErrors?: FieldErrors; pwError?: PwError; status?: 200 | 400 } = {},
+  ) => {
+    const fe = opts.fieldErrors ?? {};
+    const focus = fe.household_name ? 'household_name' : fe.emergency_number ? 'emergency_number' : undefined;
+    return page(
       c,
       'Settings',
       <>
@@ -34,6 +48,46 @@ export function settingsRoutes(deps: ResolvedAppDeps): Hono {
         {opts.saved && <p role="status">Saved.</p>}
         {opts.error && <p role="alert">{opts.error}</p>}
         <form method="post" action="/admin/settings" class="admin-form">
+          <fieldset>
+            <legend>Household</legend>
+            <Field
+              id="household_name"
+              label="Household name"
+              hint="Shown at the top of the family site."
+              error={fe.household_name}
+              control={(describedBy, invalid) => (
+                <input
+                  id="household_name"
+                  name="household_name"
+                  value={s.householdName ?? ''}
+                  maxlength={HOUSEHOLD_NAME_MAX}
+                  autocomplete="off"
+                  aria-describedby={describedBy}
+                  aria-invalid={invalid ? 'true' : undefined}
+                  autofocus={focus === 'household_name'}
+                />
+              )}
+            />
+            <Field
+              id="emergency_number"
+              label="Emergency number"
+              hint="The big red button on the family site calls this number. In the US it's 911."
+              error={fe.emergency_number}
+              control={(describedBy, invalid) => (
+                <input
+                  id="emergency_number"
+                  name="emergency_number"
+                  type="tel"
+                  value={s.emergencyNumber}
+                  maxlength={EMERGENCY_NUMBER_MAX}
+                  autocomplete="off"
+                  aria-describedby={describedBy}
+                  aria-invalid={invalid ? 'true' : undefined}
+                  autofocus={focus === 'emergency_number'}
+                />
+              )}
+            />
+          </fieldset>
           <fieldset>
             <legend>Home location</legend>
             <p class="muted">Used for distances on the family site. Use the address lookup below to fill these in.</p>
@@ -127,12 +181,16 @@ export function settingsRoutes(deps: ResolvedAppDeps): Hono {
       opts.status ?? 200,
       { layout: 'admin', activeNav: 'settings' },
     );
+  };
 
   app.get('/', (c) => formPage(c, getSettings(deps.db), { saved: c.req.query('saved') === '1' }));
 
   app.post('/', async (c) => {
     const body = await c.req.parseBody();
-    const patch = {
+    const patch: SettingsPatch = {
+      // An absent household field (an older form) keeps its value; updateSettings trims and validates both.
+      ...('household_name' in body ? { householdName: str(body['household_name']) } : {}),
+      ...('emergency_number' in body ? { emergencyNumber: str(body['emergency_number']) } : {}),
       homeLabel: str(body['home_label']),
       homeLat: optNumber(body['home_lat']),
       homeLng: optNumber(body['home_lng']),
@@ -146,7 +204,9 @@ export function settingsRoutes(deps: ResolvedAppDeps): Hono {
     } catch (e) {
       if (e instanceof SettingsValidationError) {
         // Re-render with the submitted values so the admin can correct them.
-        return formPage(c, { ...getSettings(deps.db), ...patch }, { error: e.message, status: 400 });
+        const values = { ...getSettings(deps.db), ...patch };
+        if (isFieldError(e.field)) return formPage(c, values, { fieldErrors: { [e.field]: e.message }, status: 400 });
+        return formPage(c, values, { error: e.message, status: 400 });
       }
       throw e;
     }

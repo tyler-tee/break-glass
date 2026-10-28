@@ -5,10 +5,17 @@ import { describePlacesError } from '../../../services/keyProbe.js';
 import { BudgetExhausted, newPlacesBudget } from '../../../services/places/budget.js';
 import { PlacesError, geocode } from '../../../services/places/client.js';
 import { placesOf } from '../../../services/resolver.js';
-import { SettingsValidationError, getSettings, updateSettings, type SettingsPatch } from '../settingsRepo.js';
+import {
+  SettingsValidationError,
+  getSettings,
+  radiusError,
+  updateSettings,
+  validTimeZone,
+  type SettingsPatch,
+} from '../settingsRepo.js';
 import { describeCron } from './cronWords.js';
 import { StepShell, type Notice } from './StepShell.js';
-import { Field, destination, firstError, goOf, one, many, str, type Errors, type SetupContext, type Status } from './shared.js';
+import { Field, destination, firstError, goOf, str, type Errors, type SetupContext, type Status } from './shared.js';
 
 const TIME_ZONES: readonly string[] = (() => {
   try {
@@ -18,20 +25,10 @@ const TIME_ZONES: readonly string[] = (() => {
   }
 })();
 
-const validTimeZone = (tz: string): boolean => {
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: tz });
-    return true;
-  } catch {
-    return false;
-  }
-};
-
 /** Step 3: home location, search area and schedules. */
 export function registerHomeStep(app: Hono, ctx: SetupContext): void {
   const { deps, db, render, doneSteps } = ctx;
   const { env } = deps;
-  // ---- Step 3: Home -------------------------------------------------------------------------------
 
   type HomeValues = { lat: string; lng: string; radius: string; tz: string; locCron: string; protoCron: string };
   const HOME_ORDER = ['home_lat', 'home_lng', 'default_radius_mi', 'home_tz', 'location_refresh_cron', 'protocol_refresh_cron'];
@@ -255,9 +252,9 @@ export function registerHomeStep(app: Hono, ctx: SetupContext): void {
 
     if (values.radius !== '') {
       const r = Number(values.radius);
-      if (!(Number.isFinite(r) && r > 0 && r <= 500)) {
-        errors['default_radius_mi'] = 'Search radius must be a number of miles above 0 and up to 500, like 15.';
-      } else patch.defaultRadiusMi = r;
+      const radius = radiusError(r);
+      if (radius) errors['default_radius_mi'] = radius;
+      else patch.defaultRadiusMi = r;
     }
     if (values.tz !== '') {
       if (!validTimeZone(values.tz)) errors['home_tz'] = 'Pick a time zone from the list, like America/Denver.';

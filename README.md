@@ -25,7 +25,7 @@ The database is created and migrated automatically at boot. Health check: `GET /
 
 ### What the wizard covers
 
-1. Household: a name for the household.
+1. Household: a name for the household and the emergency number the family site calls (911 by default). Both can be changed later in Settings.
 2. API keys (optional): Google Places and Anthropic. See below.
 3. Home: the home address (geocoded when a Places key is present, otherwise coordinates by hand), default radius and timezone.
 4. Categories: what you want to anticipate (dentist, urgent care, ER, vet), from presets or your own, with search terms and a target count.

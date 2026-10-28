@@ -37,7 +37,11 @@ export function getSettings(db: Db): Settings {
   return row;
 }
 
-function validTimeZone(timeZone: string): boolean {
+export const HOUSEHOLD_NAME_MAX = 60;
+export const EMERGENCY_NUMBER_MAX = 20;
+export const RADIUS_MAX_MI = 500;
+
+export function validTimeZone(timeZone: string): boolean {
   try {
     new Intl.DateTimeFormat('en-US', { timeZone });
     return true;
@@ -46,7 +50,34 @@ function validTimeZone(timeZone: string): boolean {
   }
 }
 
-export function updateSettings(db: Db, patch: SettingsPatch): Settings {
+// Plain-words checks shared by the setup wizard (which shows every field's error at once) and updateSettings.
+/** For a trimmed, non-empty household name. */
+export function householdNameError(name: string): string | undefined {
+  if (name.length > HOUSEHOLD_NAME_MAX) return `Keep the name to ${HOUSEHOLD_NAME_MAX} characters or fewer.`;
+  return undefined;
+}
+
+/** For a trimmed emergency number. */
+export function emergencyNumberError(number: string): string | undefined {
+  if (number === '') return 'Enter the number to call in an emergency (911 in the US).';
+  if (!/\d/.test(number)) return 'The emergency number needs at least one digit, like 911.';
+  if (!/^[0-9+\-() ]+$/.test(number)) return 'Use only digits, spaces, and + - ( ).';
+  if (number.length > EMERGENCY_NUMBER_MAX) return `Keep the number to ${EMERGENCY_NUMBER_MAX} characters or fewer.`;
+  return undefined;
+}
+
+export function radiusError(miles: number): string | undefined {
+  if (!(Number.isFinite(miles) && miles > 0 && miles <= RADIUS_MAX_MI)) {
+    return `Search radius must be a number of miles above 0 and up to ${RADIUS_MAX_MI}, like 15.`;
+  }
+  return undefined;
+}
+
+export function updateSettings(db: Db, input: SettingsPatch): Settings {
+  // Household name and emergency number are stored trimmed; a blank household name means "no name".
+  const patch: SettingsPatch = { ...input };
+  if (typeof patch.householdName === 'string') patch.householdName = patch.householdName.trim() || null;
+  if (typeof patch.emergencyNumber === 'string') patch.emergencyNumber = patch.emergencyNumber.trim();
   const next = { ...getSettings(db), ...patch };
 
   if (next.homeLat !== null && !(next.homeLat >= -90 && next.homeLat <= 90)) {
@@ -58,9 +89,12 @@ export function updateSettings(db: Db, patch: SettingsPatch): Settings {
   if ((next.homeLat === null) !== (next.homeLng === null)) {
     throw new SettingsValidationError('home_lat', 'home_lat and home_lng must both be set or both be empty');
   }
-  if (next.defaultRadiusMi !== null && !(next.defaultRadiusMi > 0)) {
-    throw new SettingsValidationError('default_radius_mi', 'default_radius_mi must be greater than 0');
-  }
+  const radius = next.defaultRadiusMi === null ? undefined : radiusError(next.defaultRadiusMi);
+  if (radius) throw new SettingsValidationError('default_radius_mi', radius);
+  const household = next.householdName === null ? undefined : householdNameError(next.householdName);
+  if (household) throw new SettingsValidationError('household_name', household);
+  const emergency = emergencyNumberError(next.emergencyNumber);
+  if (emergency) throw new SettingsValidationError('emergency_number', emergency);
   if (!validTimeZone(next.homeTz)) {
     throw new SettingsValidationError('home_tz', `home_tz "${next.homeTz}" is not a valid time zone`);
   }
