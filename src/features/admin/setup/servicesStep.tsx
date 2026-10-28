@@ -97,6 +97,7 @@ export function registerServicesStep(app: Hono, ctx: SetupContext): void {
         heading="Optional services"
         doneSteps={doneSteps()}
         notice={opts.notice}
+        nextSecondary={Boolean(opts.justSaved && next)}
         intro={
           <p>
             Both keys are optional. Without them you can still add places and write protocols by hand. Keys are stored on

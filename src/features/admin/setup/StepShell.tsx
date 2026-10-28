@@ -17,6 +17,8 @@ export type StepShellProps = {
   after?: Child;
   /** Label of the primary button (default Save and continue). */
   nextLabel?: string;
+  /** Demote the next button to secondary when something else on the page is the one primary action. */
+  nextSecondary?: boolean;
   /** The step's fields; they sit inside the main form, above the navigation buttons. */
   children?: Child;
 };
@@ -25,7 +27,7 @@ export type StepShellProps = {
  * The wizard frame: "Step N of 7", the step list, and one main form whose buttons carry name="go":
  * next (Save and continue, the only primary and first in DOM so Enter picks it), skip, back, later.
  */
-export const StepShell: FC<StepShellProps> = ({ step, heading, intro, notice, doneSteps = [], before, after, nextLabel = 'Save and continue', children }) => {
+export const StepShell: FC<StepShellProps> = ({ step, heading, intro, notice, doneSteps = [], before, after, nextLabel = 'Save and continue', nextSecondary = false, children }) => {
   const next = nextStep(step);
   const prev = prevStep(step);
   return (
@@ -62,7 +64,7 @@ export const StepShell: FC<StepShellProps> = ({ step, heading, intro, notice, do
       <form method="post" action={stepPath(step)} class="admin-form wizard-form" id="step-form">
         {children}
         <div class="wizard-actions">
-          <button type="submit" name="go" value="next">
+          <button type="submit" name="go" value="next" class={nextSecondary ? 'btn-secondary' : undefined}>
             {nextLabel}
           </button>
           {next && (
