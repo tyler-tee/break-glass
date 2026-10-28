@@ -54,6 +54,7 @@ export type Prepared<T extends RankPlace = RankPlace> = RankFacts & {
   duplicateOfRef?: number;
 };
 export type DropReason = 'closed_permanently' | 'outside_radius';
+export type Dropped<T extends RankPlace = RankPlace> = { place: T; reason: DropReason; distanceMi: number | null };
 
 const DUPLICATE_METERS = 50;
 const METERS_PER_MILE = 1609.344;
@@ -80,14 +81,14 @@ const coordsOf = (p: RankPlace): LatLng | null => (p.lat !== null && p.lng !== n
 export function prepass<T extends RankPlace>(
   places: T[],
   opts: { home: LatLng; radiusMi: number },
-): { kept: Prepared<T>[]; dropped: { place: T; reason: DropReason }[] } {
-  const dropped: { place: T; reason: DropReason }[] = [];
+): { kept: Prepared<T>[]; dropped: Dropped<T>[] } {
+  const dropped: Dropped<T>[] = [];
   const near: { place: T; distanceMi: number | null }[] = [];
   for (const place of places) {
     const at = coordsOf(place);
     const distanceMi = at ? haversineMi(opts.home, at) : place.distanceMi;
-    if (place.businessStatus === 'CLOSED_PERMANENTLY') dropped.push({ place, reason: 'closed_permanently' });
-    else if (distanceMi !== null && distanceMi > opts.radiusMi) dropped.push({ place, reason: 'outside_radius' });
+    if (place.businessStatus === 'CLOSED_PERMANENTLY') dropped.push({ place, reason: 'closed_permanently', distanceMi });
+    else if (distanceMi !== null && distanceMi > opts.radiusMi) dropped.push({ place, reason: 'outside_radius', distanceMi });
     else near.push({ place, distanceMi });
   }
   near.sort((a, b) => (a.distanceMi ?? Infinity) - (b.distanceMi ?? Infinity));

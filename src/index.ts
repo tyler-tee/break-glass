@@ -8,6 +8,7 @@ import { recheckProtocols } from './jobs/recheckProtocols.js';
 import { refreshLocations } from './jobs/refreshLocations.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { installState } from './features/admin/install.js';
+import { recoverInterruptedRuns } from './features/locations/findAndRank.js';
 import { createSecretsStore } from './features/admin/secrets.js';
 import { createSetupCodeManager } from './features/admin/setupCode.js';
 import { newPlacesBudget } from './services/places/budget.js';
@@ -20,6 +21,8 @@ const env = loadEnv(process.env);
 const db = openDb(env.DATABASE_PATH);
 runMigrations(db);
 ensureSettingsRow(db);
+// A find run runs in-process; one still marked running was cut off by the last shutdown.
+if (recoverInterruptedRuns(db, new Date()) > 0) console.warn('Marked an interrupted find run as failed');
 const secrets = createSecretsStore(db, env);
 secrets.getSessionSecret(); // without SESSION_SECRET in env, generate and persist one on first boot
 const resolve = makeServiceResolver(db, env, secrets, { fetch: globalThis.fetch, log: console });

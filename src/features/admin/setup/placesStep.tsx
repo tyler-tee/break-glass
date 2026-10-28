@@ -1,13 +1,10 @@
 import type { Hono, Context } from 'hono';
 import type { Child } from 'hono/jsx';
 import { PICKS_PER_CATEGORY } from '../../../domain/ranking.js';
-import { describePlacesError } from '../../../services/keyProbe.js';
-import { BudgetExhausted, newPlacesBudget } from '../../../services/places/budget.js';
-import { PlacesError } from '../../../services/places/client.js';
-import { extractOf, placesOf } from '../../../services/resolver.js';
+import { placesOf } from '../../../services/resolver.js';
 import { ReviewQueue } from '../../../web/components/ReviewQueue.js';
 import { getCategory, listCategories } from '../../categories/repo.js';
-import { NoHomeLocation, runDiscovery } from '../../locations/discovery.js';
+import { FindRunActive, NoHomeLocation, findRunDeps, startFindRun } from '../../locations/findAndRank.js';
 import { listLocations } from '../../locations/repo.js';
 import { LocationError, createManualLocation } from '../../locations/service.js';
 import { StepShell, type Notice } from './StepShell.js';
@@ -16,7 +13,6 @@ import { Field, destination, goOf, str, type SetupContext, type Status } from '.
 /** Step 5: find places and approve them in place. */
 export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
   const { deps, db, render, doneSteps, now } = ctx;
-  const { env } = deps;
 
   const count = (v: string | undefined): number | undefined => (v !== undefined && /^\d{1,6}$/.test(v) ? Number(v) : undefined);
   type Found = { categoryId: number; inserted: number; skipped: number; stopped?: 'run' | 'month' };
@@ -210,21 +206,10 @@ export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
         400,
       );
     }
-    const extract = extractOf(deps);
+    // Stopgap until the Find places page replaces this button: start a run for this one category and come back.
+    // The run carries on in the background; one already running is left to finish.
     try {
-      const report = await runDiscovery(db, id, {
-        places: { ...places, budget: newPlacesBudget(db, env, deps.now) },
-        now: now,
-        log: console,
-        ...(extract ? { extract } : {}),
-      });
-      // runDiscovery reports budget stops instead of throwing; with no calls made there is nothing to show.
-      if (report.stoppedEarly && report.callsUsed === 0) {
-        return fail(describePlacesError(new BudgetExhausted('budget', report.stopReason ?? 'run'), places.apiKey), 429);
-      }
-      const q = new URLSearchParams({ found: String(id), inserted: String(report.inserted), skipped: String(report.skipped) });
-      if (report.stoppedEarly) q.set('stopped', report.stopReason ?? 'run');
-      return c.redirect(`/admin/setup/places?${q}#${category.slug}`, 302);
+      startFindRun(db, [id], findRunDeps(deps, places));
     } catch (e) {
       if (e instanceof NoHomeLocation) {
         return fail(
@@ -234,10 +219,9 @@ export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
           400,
         );
       }
-      if (e instanceof BudgetExhausted) return fail(describePlacesError(e, places.apiKey), 429);
-      if (e instanceof PlacesError) return fail(describePlacesError(e, places.apiKey), 502);
-      throw e;
+      if (!(e instanceof FindRunActive)) throw e;
     }
+    return c.redirect(`/admin/setup/places#${category.slug}`, 302);
   });
 
   app.post('/places/manual', async (c) => {

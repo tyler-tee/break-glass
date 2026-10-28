@@ -8,6 +8,7 @@ import { hashPassword } from '../../src/features/admin/auth.js';
 import { createSecretsStore } from '../../src/features/admin/secrets.js';
 import { CATEGORY_PRESETS } from '../../src/features/admin/setup/presets.js';
 import { createCategory, listCategories } from '../../src/features/categories/repo.js';
+import { latestRun } from '../../src/features/locations/findAndRank.js';
 import { makeServiceResolver } from '../../src/services/resolver.js';
 import { adminLogin } from '../helpers/adminLogin.js';
 import { recordingFetch } from '../helpers/recordingFetch.js';
@@ -298,21 +299,19 @@ describe('places step with a Places key', () => {
     expect(html).toContain('>Find places</button>');
   });
 
-  it('discovery inserts candidates and lands back on the wizard with a status line and Approve/Reject', async () => {
+  // Stopgap: the button starts a one-category find run in the background and returns to the wizard.
+  it('discovery starts a find run, lands back on the wizard, and the new candidates get Approve/Reject', async () => {
     const { db, post, get, cat } = await setup();
     const res = await post(`/admin/setup/places/discover/${cat.id}`, {});
     expect(res.status).toBe(302);
-    const loc = res.headers.get('location')!;
-    expect(loc.startsWith('/admin/setup/places?')).toBe(true);
-    expect(loc).toContain('inserted=2');
-    expect(loc).toContain('skipped=0');
-    expect(loc.endsWith('#test-dentist')).toBe(true);
+    expect(res.headers.get('location')).toBe('/admin/setup/places#test-dentist');
+    await vi.waitFor(() => expect(latestRun(db)!.status).toBe('done'));
+    expect(latestRun(db)!.progress[String(cat.id)]).toEqual({ state: 'done', found: 2 });
 
     const rows = db.select().from(locations).all();
     expect(rows.map((r) => r.name).sort()).toEqual(['Far Dental', 'Near Dental Group']);
 
-    const html = await (await get(loc.replace(/#.*/, ''))).text();
-    expect(html).toMatch(/role="status"[^>]*>[^<]*Added 2 new places/);
+    const html = await (await get('/admin/setup/places')).text();
     expect(html).toContain('Near Dental Group');
     for (const r of rows) {
       expect(html).toContain(`/admin/locations/${r.id}/approve`);
@@ -325,6 +324,7 @@ describe('places step with a Places key', () => {
   it('approving from the wizard returns to the wizard and updates the count', async () => {
     const { db, post, get, cat } = await setup();
     await post(`/admin/setup/places/discover/${cat.id}`, {});
+    await vi.waitFor(() => expect(latestRun(db)!.status).toBe('done'));
     const near = db.select().from(locations).all().find((r) => r.name === 'Near Dental Group')!;
     const res = await post(`/admin/locations/${near.id}/approve`, { return_to: '/admin/setup/places#test-dentist' });
     expect(res.status).toBe(302);
@@ -352,26 +352,29 @@ describe('places step with a Places key', () => {
     expect(db.select().from(locations).all()).toHaveLength(0);
   });
 
-  it('a Google error shows plain words and never the key or the raw upstream body', async () => {
+  it('a Google error shows up on the run in plain words, never the key or the raw upstream body', async () => {
     const fetchFn = (async () =>
       new Response(`{"error":{"message":"RAW-UPSTREAM-BODY key=${KEY}"}}`, { status: 403 })) as unknown as typeof fetch;
-    const { post, cat } = await setup({ fetch: fetchFn });
-    const res = await post(`/admin/setup/places/discover/${cat.id}`, {});
-    expect(res.status).toBe(502);
-    const html = await res.text();
-    expect(html).toMatch(/role="alert"/);
-    expect(html).toContain('Google rejected this key');
-    expect(html).not.toContain('RAW-UPSTREAM-BODY');
-    expect(html).not.toContain(KEY);
+    const { post, db, cat } = await setup({ fetch: fetchFn });
+    expect((await post(`/admin/setup/places/discover/${cat.id}`, {})).status).toBe(302);
+    await vi.waitFor(() => expect(latestRun(db)!.status).toBe('done'));
+    const progress = latestRun(db)!.progress[String(cat.id)]!;
+    expect(progress.state).toBe('failed');
+    expect(progress.message).toContain('Google rejected this key');
+    expect(JSON.stringify(latestRun(db))).not.toContain('RAW-UPSTREAM-BODY');
+    expect(JSON.stringify(latestRun(db))).not.toContain(KEY);
   });
 
-  it('an exhausted monthly cap shows a plain message', async () => {
+  it('an exhausted monthly cap stops the run with a plain message', async () => {
     const { post, db, cat } = await setup();
     db.insert(placesUsage).values({ month: now.toISOString().slice(0, 7), calls: 100000, updatedAt: now }).run();
-    const res = await post(`/admin/setup/places/discover/${cat.id}`, {});
-    expect(res.status).toBe(429);
-    const html = await res.text();
-    expect(html).toMatch(/role="alert"[^>]*>[^<]*Places call limit/);
+    expect((await post(`/admin/setup/places/discover/${cat.id}`, {})).status).toBe(302);
+    await vi.waitFor(() => expect(latestRun(db)!.status).toBe('done'));
+    expect(latestRun(db)!.progress[String(cat.id)]).toEqual({
+      state: 'stopped',
+      message: "This month's Places call limit has been reached. Lookups start working again next month.",
+    });
+    expect(db.select().from(locations).all()).toHaveLength(0);
   });
 
   it('an unknown category is a 404', async () => {

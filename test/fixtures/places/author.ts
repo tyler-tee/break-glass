@@ -223,6 +223,41 @@ const weekdayClinic = {
   regularOpeningHours: { periods: weekday, weekdayDescriptions: weekdayText },
 };
 
+// The dentists the older discovery tests used, as richSearch returns them.
+const nearDentalRich = {
+  id: 'ChIJnear',
+  displayName: { text: 'Near Dental Group', languageCode: 'en' },
+  formattedAddress: '100 S Main St, Salt Lake City, UT 84101, USA',
+  shortFormattedAddress: '100 S Main St, Salt Lake City',
+  location: { latitude: 40.775, longitude: -111.891 },
+  businessStatus: 'OPERATIONAL',
+  primaryType: 'dentist',
+  primaryTypeDisplayName: { text: 'Dentist', languageCode: 'en' },
+  googleMapsUri: 'https://maps.google.com/?cid=2001',
+  rating: 4.6,
+  userRatingCount: 120,
+  regularOpeningHours: { periods: weekday, weekdayDescriptions: weekdayText },
+  nationalPhoneNumber: '(801) 555-0100',
+  websiteUri: 'https://near-dental.example',
+  reviews: [review('Saw me the same day for a cracked tooth.', 5, '2 months ago')],
+};
+const farDentalRich = {
+  id: 'ChIJfar',
+  displayName: { text: 'Far Dental', languageCode: 'en' },
+  formattedAddress: '900 N State St, Bountiful, UT 84010, USA',
+  shortFormattedAddress: '900 N State St, Bountiful',
+  location: { latitude: 40.9055, longitude: -111.891 },
+  businessStatus: 'OPERATIONAL',
+  primaryType: 'dentist',
+  primaryTypeDisplayName: { text: 'Dentist', languageCode: 'en' },
+  googleMapsUri: 'https://maps.google.com/?cid=2002',
+  rating: 4.2,
+  userRatingCount: 80,
+  regularOpeningHours: { periods: weekday, weekdayDescriptions: weekdayText },
+  nationalPhoneNumber: '(801) 555-0102',
+  websiteUri: 'https://far-dental.example',
+};
+
 function authorRich(): void {
   const rich = (query: string, places: unknown[]) =>
     authorFixture(
@@ -234,6 +269,7 @@ function authorRich(): void {
   rich('late night pharmacy', [cvs, dayPharmacy, smiths]);
   rich('urgent care', [instacare, weekdayClinic]);
   rich('nothing open zzz', []);
+  rich('emergency dentist', [nearDentalRich, farDentalRich]);
 }
 
 function main(): void {

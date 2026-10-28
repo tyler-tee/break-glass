@@ -15,18 +15,6 @@ export function haversineMi(a: LatLng, b: LatLng): number {
   return 2 * EARTH_RADIUS_MI * Math.asin(Math.sqrt(h));
 }
 
-export function rankByDistanceThenRating<T extends { distanceMi: number; rating: number | null }>(
-  items: T[],
-): T[] {
-  return [...items].sort((a, b) => {
-    if (a.distanceMi !== b.distanceMi) return a.distanceMi - b.distanceMi;
-    if (a.rating === b.rating) return 0;
-    if (a.rating === null) return 1;
-    if (b.rating === null) return -1;
-    return b.rating - a.rating;
-  });
-}
-
 export const RANK_FLAGS = [
   'not_24h',
   'closed_temporarily',

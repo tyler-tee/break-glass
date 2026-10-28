@@ -2,11 +2,8 @@ import { Hono } from 'hono';
 import type { Child } from 'hono/jsx';
 import type { AppDeps } from '../../app.js';
 import { page } from '../../web/Layout.js';
-import { budgetExhaustedPage, placesErrorPage } from '../../web/placesErrorPage.js';
-import { BudgetExhausted, newPlacesBudget } from '../../services/places/budget.js';
-import { PlacesError } from '../../services/places/client.js';
-import { extractOf, placesOf } from '../../services/resolver.js';
-import { NoHomeLocation, runDiscovery } from '../locations/discovery.js';
+import { placesOf } from '../../services/resolver.js';
+import { FindRunActive, NoHomeLocation, findRunDeps, startFindRun } from '../locations/findAndRank.js';
 import type { HoursNeed } from '../../domain/types.js';
 import { CategoryError, createCategory, deleteCategory, getCategory, listCategories, updateCategory } from './repo.js';
 
@@ -178,32 +175,17 @@ export function categoriesRoutes(deps: AppDeps): Hono {
         status: 400,
       });
     }
-    const extract = extractOf(deps);
+    // Stopgap until the Find places page replaces this button: start a run for this one category and go to
+    // the review queue. The run carries on in the background; one already running is left to finish.
     try {
-      const report = await runDiscovery(db, id, {
-        places: { ...places, budget: newPlacesBudget(db, deps.env, deps.now) },
-        now: deps.now ?? (() => new Date()),
-        log: console,
-        ...(extract ? { extract } : {}),
-      });
-      // runDiscovery reports budget stops instead of throwing; with no calls made there is nothing to show.
-      if (report.stoppedEarly && report.callsUsed === 0) return budgetExhaustedPage(c, report.stopReason ?? 'run');
-      const q = new URLSearchParams({
-        category: category.slug,
-        inserted: String(report.inserted),
-        skipped: String(report.skipped),
-        calls: String(report.callsUsed),
-      });
-      if (report.stoppedEarly) q.set('stopped', report.stopReason ?? 'run');
-      return c.redirect(`/admin/candidates?${q}`, 302);
+      startFindRun(db, [id], findRunDeps(deps, places));
     } catch (e) {
       if (e instanceof NoHomeLocation) {
         return listPage(c, { error: 'Set the home location in Settings first', status: 400 });
       }
-      if (e instanceof BudgetExhausted) return budgetExhaustedPage(c, e.reason);
-      if (e instanceof PlacesError) return placesErrorPage(c, e);
-      throw e;
+      if (!(e instanceof FindRunActive)) throw e;
     }
+    return c.redirect(`/admin/candidates?${new URLSearchParams({ category: category.slug })}`, 302);
   });
 
   app.post('/:id/delete', (c) => {
