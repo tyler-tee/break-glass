@@ -99,7 +99,11 @@ export function settingsRoutes(deps: ResolvedAppDeps): Hono {
                 restart.
               </p>
             ) : (
-              <p class="muted">Changing it signs out every other device.</p>
+              secrets.isEnvProvided('sessionSecret') ? (
+                <p class="muted">Choose a new password for the admin account.</p>
+              ) : (
+                <p class="muted">Changing it signs out every other device.</p>
+              )
             )}
             <p>
               <label>

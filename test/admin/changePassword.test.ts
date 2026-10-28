@@ -85,3 +85,25 @@ describe('change password (env-provided hash)', () => {
     expect(secrets.getAdminHash()).toBe(hash);
   });
 });
+
+describe('change password hint (session secret source)', () => {
+  const setup = async (envVars: Record<string, string>) => {
+    const db = createTestDb();
+    const env = loadEnv(envVars);
+    const secrets = createSecretsStore(db, env);
+    secrets.setAdminHash(await hashPassword('correct horse battery'));
+    const app = createApp({ db, env, secrets });
+    const cookie = await adminLogin(app, 'correct horse battery');
+    return (await app.request('/admin/settings', { headers: { cookie } })).text();
+  };
+
+  it('says it signs out other devices when the session secret is app-managed', async () => {
+    expect(await setup({})).toContain('signs out every other device');
+  });
+
+  it('omits that claim when SESSION_SECRET comes from the environment', async () => {
+    const html = await setup({ SESSION_SECRET: 's'.repeat(32) });
+    expect(html).not.toContain('signs out every other device');
+    expect(html).toContain('Change password');
+  });
+});

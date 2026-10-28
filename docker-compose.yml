@@ -5,7 +5,10 @@ services:
     stop_grace_period: 20s
     ports:
       - "3000:3000"
-    env_file: .env
+    # .env is optional: the app runs with no configuration and prompts for setup on first boot.
+    env_file:
+      - path: .env
+        required: false
     environment:
       - "TZ=${TZ:-America/Denver}"
       # Override values copied from .env.example: the database must live on the volume.

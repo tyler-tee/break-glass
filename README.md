@@ -6,32 +6,61 @@ A self-hosted web app for the home LAN that answers one question fast: "Where do
 
 **Protocol lifecycle.** The admin enters source URLs for a protocol (the LLM never picks its own sources), generates a `draft`, reviews it next to the sources, and publishes it. Exactly one version is `published` at a time and the previous one becomes `superseded`. A monthly re-check re-fetches the sources of each published version; if any changed, the protocol is flagged `needs_rereview` and keeps showing the published text with a warning until a new version is published.
 
-## Prerequisites
+## Quick start
 
-- Docker with Compose, for the homelab deployment.
-- Node 24 and npm on any machine where you generate the password hash and session secret (it can be your laptop, not the server), and for local development and tests. No-Node alternatives are given under Configuration.
-- Optional: a Google Places API (New) key (discovery, refresh, geocoding) and an Anthropic API key (extraction, protocol drafting). Without them the app still serves manually entered locations.
+You need Docker with Compose on the server. Nothing else, and no `.env` file.
 
-## Configuration
+```
+git clone <this repo> break-glass
+cd break-glass
+docker compose up -d --build
+docker compose logs app
+```
 
-Copy the example file and edit it:
+1. `docker compose logs app` prints a one-time setup code. Copy it.
+2. Open `http://<host>:3000/setup` from a device on your LAN, enter the code, and choose the admin password.
+3. The setup wizard at `/admin/setup` takes it from there.
+
+The database is created and migrated automatically at boot. Health check: `GET /health` returns `{"ok":true}` (the container healthcheck uses it). Family pages at `http://<host>:3000` need no login.
+
+### What the wizard covers
+
+1. Household: a name for the household.
+2. API keys (optional): Google Places and Anthropic. See below.
+3. Home: the home address (geocoded when a Places key is present, otherwise coordinates by hand), default radius and timezone.
+4. Categories: what you want to anticipate (dentist, urgent care, ER, vet), from presets or your own, with search terms and a target count.
+5. Places: find nearby candidates for each category, then approve the ones you want.
+6. A first protocol: add its source URLs and generate a draft, or write it yourself; review and publish.
+
+You can leave the wizard and come back; it stays available until you finish it.
+
+### API keys are optional
+
+- Google Places API (New) key: geocoding, discovery of nearby places, and the weekly location refresh. Without it you enter locations by hand.
+- Anthropic API key: reading provider websites during refresh and drafting protocols from your sources. Without it you write protocols by hand.
+
+Add or change either later in Setup, under Services. Keys saved in the app are stored in the SQLite database on the `bg-data` volume.
+
+## Advanced: configure with .env
+
+Every variable is optional. To pre-seed configuration, copy the example file and edit it:
 
 ```
 cp .env.example .env
 ```
 
-1. Admin password hash: `npm run hash-password -- '<password>'` (run `npm install` once first). Paste the output into `ADMIN_PASSWORD_HASH`. Without Node on the host you can build the image first and hash inside it (untested here, since Docker was unavailable when this was written): `docker compose run --rm --no-deps app node -e "import('./dist/features/admin/auth.js').then(m=>m.hashPassword(process.argv[1])).then(console.log)" '<password>'`. This needs a `.env` that already passes validation, so put a placeholder hash and a real secret in first, then replace the hash.
-2. Session secret: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` and paste it into `SESSION_SECRET` (at least 32 characters). Without Node, `openssl rand -hex 32` does the same.
-3. Optionally add `GOOGLE_PLACES_API_KEY`, and `LLM_PROVIDER=anthropic` with `LLM_API_KEY`.
+Anything set in the environment wins over a value saved in the app, and the app shows it as read-only ("Set by the server environment"). For local development you can put overrides in `.env.local`. It is loaded after `.env`, wins over it, and never overrides variables set in the real environment. Both files are git-ignored. Empty values (`PORT=`) count as unset and fall back to the default.
 
-For local development you can put overrides in `.env.local`. It is loaded after `.env`, wins over it, and never overrides variables set in the real environment. Both files are git-ignored. Empty values (`PORT=`) count as unset and fall back to the default.
+- `ADMIN_PASSWORD_HASH`: claim the install without the setup code. Generate it with `npm run hash-password -- '<password>'` (run `npm install` once first; this can be your laptop). Without Node on the host, build the image and hash inside it: `docker compose run --rm --no-deps app node -e "import('./dist/features/admin/auth.js').then(m=>m.hashPassword(process.argv[1])).then(console.log)" '<password>'` (untested here, since Docker was unavailable when this was written).
+- `SESSION_SECRET`: at least 32 characters (`openssl rand -hex 32`). Generated automatically and stored in the database if absent.
+- Optionally `GOOGLE_PLACES_API_KEY`, and `LLM_PROVIDER=anthropic` with `LLM_API_KEY`.
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` | `3000` | HTTP port (positive integer). Compose pins this to 3000 inside the container. |
 | `DATABASE_PATH` | `./data/app.db` | SQLite file. Compose pins it to `/data/app.db` on the `bg-data` volume. |
-| `ADMIN_PASSWORD_HASH` | required | Output of `npm run hash-password`. |
-| `SESSION_SECRET` | required | At least 32 characters; signs session cookies. |
+| `ADMIN_PASSWORD_HASH` | unset | Output of `npm run hash-password`. Optional. |
+| `SESSION_SECRET` | generated | At least 32 characters; signs session cookies. Optional. |
 | `GOOGLE_PLACES_API_KEY` | unset | Enables geocoding, discovery and location refresh. |
 | `LLM_PROVIDER` | `none` | `anthropic` or `none`. |
 | `LLM_API_KEY` | unset | Anthropic API key. |
@@ -44,20 +73,13 @@ For local development you can put overrides in `.env.local`. It is loaded after 
 | `PROTOCOL_SOURCE_ALLOWLIST` | empty | Comma-separated domains allowed as protocol sources; empty means no restriction. |
 | `TZ` | `America/Denver` | Compose only: container timezone. |
 
-## First run
+### Upgrading an existing install
 
-```
-docker compose up -d --build
-```
+Secrets already in your `.env` keep working and show as read-only in the app. The setup wizard appears once after the upgrade until you finish it (or skip through it).
 
-1. Open `http://<host>:3000` from any device on the LAN. The family pages need no login.
-2. Log in at `http://<host>:3000/admin/login` with your password.
-3. Settings: geocode the home address (or enter coordinates), set the default radius, the two cron schedules, and the timezone.
-4. Categories: add what you want to anticipate (dentist, urgent care, ER, vet) with search terms and a target count.
-5. Discover: run discovery per category, then review the candidates and approve up to the target count.
-6. Protocols: create a protocol, add its sources, Generate draft, review it beside the sources, and publish.
+## Prerequisites for development
 
-The database is created and migrated automatically at boot, and a default settings row is created if none exists. Health check: `GET /health` returns `{"ok":true}` (the container healthcheck uses it).
+Node 24 and npm, for local development and tests and for generating a password hash on a machine without the app's container.
 
 ## Running natively for development
 
@@ -95,7 +117,8 @@ In the Google Cloud console, also restrict the API key to "Places API (New)" onl
 
 - The app is meant for a trusted LAN over plain HTTP. Do not expose it to the internet.
 - Session cookies are HttpOnly, SameSite and signed, but not Secure (that would break plain HTTP). They expire after 12 hours.
-- Sessions are stateless signed cookies, so they cannot be revoked individually. Rotating `SESSION_SECRET` logs everyone out.
+- Sessions are stateless signed cookies, so they cannot be revoked individually. Changing the admin password signs out every other device only when `SESSION_SECRET` is not set in the environment (the app then rotates its own secret). If you set `SESSION_SECRET` yourself, change it and restart to sign everyone out.
+- Secrets saved in the app (API keys, password hash, session secret) live in the SQLite database on the `bg-data` volume. That is the same trust boundary as a `.env` file on the host: whoever can read the volume can read them.
 - Website fetches (extraction and protocol sources) are SSRF-guarded against private and loopback addresses, but DNS rebinding is not fully closed.
 - LLM output is validated against a schema and sanitized at render time (markdown is converted to HTML and cleaned before it is shown); nothing is published without admin review.
 - Admin POSTs whose `Origin` (or `Referer`) host differs from the request `Host` are rejected with 403.
@@ -129,5 +152,6 @@ In the Google Cloud console, also restrict the API key to "Places API (New)" onl
 - 403 from Places: the key is invalid, or its API restriction does not include "Places API (New)". Check the key and that the API is enabled for the project.
 - 502 pages in the admin UI: an upstream returned an error. Places errors (including timeouts and network failures, shown as status 0) show the upstream error text. A protocol draft that the LLM provider fails (rate limit, 5xx, auth, network) or that fails validation shows "Draft rejected" with an "LLM provider error" message truncated to 200 characters.
 - 429: the Places call cap for the run or the month was reached. Raise `PLACES_CALL_CAP` or `PLACES_MONTHLY_CAP`, or wait for the next month.
-- Container restarts immediately: check `docker compose logs app`; a missing or too-short `SESSION_SECRET` or a missing `ADMIN_PASSWORD_HASH` is reported as "Invalid environment".
+- Container restarts immediately: check `docker compose logs app`; an invalid value in `.env` (for example a `SESSION_SECRET` shorter than 32 characters) is reported as "Invalid environment". With no `.env`, none of the variables are required.
 - Forgot the admin password: run `docker compose exec app node dist/cli/reset-admin.js`, open `http://<server>:3000/setup`, then run `docker compose logs app` to find the new setup code. This clears the password stored in the database and signs out all admin sessions. It will not touch `ADMIN_PASSWORD_HASH`; if that is set in the environment, edit it there and restart.
+- Setup code locked after 5 wrong tries: wait 15 minutes, or run `docker compose restart app` to get a fresh code from the logs. If someone on the network keeps locking it, set `ADMIN_PASSWORD_HASH` in `.env` to claim the install directly.
