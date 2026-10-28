@@ -14,7 +14,7 @@ import {
 } from '../../web/family/ui.js';
 import { POISON_CONTROL } from '../family/routes.js';
 import { firstPhotos, formatDay, oldestChecked } from './familyQueries.js';
-import { guideLinks, linkedFor, orderedFacts, parseSteps, placeFacts } from './links.js';
+import { guideLinks, linkedFor, orderedFacts, parseSteps, placeFacts, uniqueByPhone } from './links.js';
 import type { HouseFact } from './repo.js';
 
 /** The family-facing Home pages. Mounted at /house, next to the photo route. */
@@ -36,7 +36,7 @@ export function houseFamilyRoutes(deps: AppDeps): Hono {
     const notes = facts.filter((f) => f.kind === 'note');
     const utilities = facts.filter((f) => f.kind === 'utility');
     const contacts = facts.filter((f) => f.kind === 'contact');
-    const calls = [...utilities, ...contacts].filter((f) => f.phone);
+    const calls = uniqueByPhone([...utilities, ...contacts].filter((f) => f.phone));
     const photos = firstPhotos(db, shutoffs);
     const checked = oldestChecked(facts);
     const empty = guides.length === 0 && facts.length === 0;
@@ -129,13 +129,18 @@ export function houseFamilyRoutes(deps: AppDeps): Hono {
     const extra = chunks.filter((ch) => !['Title and scope', 'Escalation criteria', 'Steps', 'Do not'].includes(ch.heading));
     const reviewed = version.reviewedAt ? ` · reviewed ${version.reviewedAt.toISOString().slice(0, 10)}` : '';
 
-    // Shutoffs and notes go inside the first step that names them; the rest sit above the steps.
-    const inlineable = links.linkedFacts.filter((f) => f.kind === 'shutoff' || f.kind === 'note');
+    // Any shutoff, note or utility a step names goes inside that step, whatever the guide's tags ("Check the AC
+    // breakers at the breaker panel" shows the panel on the AC guide). Linked shutoffs and notes no step names sit
+    // above the steps; linked utilities no step names stay in Who to call.
+    const inlineable = orderedFacts(db).filter((f) => f.kind === 'shutoff' || f.kind === 'note' || f.kind === 'utility');
     const parsed = steps ? parseSteps(withoutHeading(steps.md)) : null;
     const placed = parsed ? placeFacts(parsed.items.map((i) => i.text), inlineable) : { byStep: new Map<number, HouseFact[]>(), unplaced: inlineable };
+    const inSteps = new Set([...placed.byStep.values()].flat().map((f) => f.id));
+    const aboveSteps = links.linkedFacts.filter((f) => (f.kind === 'shutoff' || f.kind === 'note') && !inSteps.has(f.id));
+    const utilities = links.utilities.filter((f) => f.phone && !inSteps.has(f.id));
     const photos = firstPhotos(db, inlineable);
     const ours = links.ours.filter((f) => f.phone);
-    const hasCalls = ours.length > 0 || links.picks.length > 0 || links.utilities.length > 0;
+    const hasCalls = ours.length > 0 || links.picks.length > 0 || utilities.length > 0;
 
     return page(
       c,
@@ -158,12 +163,12 @@ export function houseFamilyRoutes(deps: AppDeps): Hono {
             </span>
           </div>
         ) : null}
-        {placed.unplaced.length > 0 ? (
+        {aboveSteps.length > 0 ? (
           <section class="group" aria-labelledby="yourhouse-title">
             <h2 class="section-label" id="yourhouse-title">
               Your house
             </h2>
-            {placed.unplaced.map((f) => (
+            {aboveSteps.map((f) => (
               <InlineFact fact={f} photo={photos.get(f.id)} />
             ))}
           </section>
@@ -212,9 +217,7 @@ export function houseFamilyRoutes(deps: AppDeps): Hono {
             {links.picks.map((v) => (
               <PickCard view={v} />
             ))}
-            {links.utilities
-              .filter((f) => f.phone)
-              .map((f) => (
+            {utilities.map((f) => (
                 <div class="alert" role="note">
                   <Svg name="warning" />
                   <span>
@@ -261,10 +264,9 @@ export function houseFamilyRoutes(deps: AppDeps): Hono {
     const facts = orderedFacts(db);
     const shutoffs = facts.filter((f) => f.kind === 'shutoff');
     const notes = facts.filter((f) => f.kind === 'note');
-    const calls = [
-      ...facts.filter((f) => f.kind === 'utility'),
-      ...facts.filter((f) => f.kind === 'contact'),
-    ].filter((f) => f.phone);
+    const calls = uniqueByPhone(
+      [...facts.filter((f) => f.kind === 'utility'), ...facts.filter((f) => f.kind === 'contact')].filter((f) => f.phone),
+    );
     const photos = firstPhotos(db, shutoffs);
     const withPhoto = shutoffs.filter((f) => photos.has(f.id));
     const doc = (

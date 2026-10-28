@@ -237,3 +237,37 @@ describe('GET /house/print', () => {
     expect(html).not.toContain('<h2>Shutoffs</h2>');
   });
 });
+
+describe('walk-through fixes', () => {
+  const count = (html: string, s: string) => html.split(s).length - 1;
+
+  it('lists a company entered for two trades once on the landing page and the print sheet', async () => {
+    const plumber = homeCat('Emergency plumber', 'emergency-plumber');
+    const hvac = homeCat('Heating & cooling repair', 'heating-cooling-repair');
+    fact({ kind: 'contact', title: 'Cool Pipes', org: 'Cool Pipes', phone: '(555) 010-0300', categoryId: plumber.id });
+    fact({ kind: 'contact', title: 'Cool Pipes', org: 'Cool Pipes', phone: '555-010-0300', categoryId: hvac.id });
+    expect(count((await get('/house')).html, 'Call Cool Pipes')).toBe(1);
+    expect(count((await get('/house/print')).html, '010-0300')).toBe(1);
+  });
+
+  it('shows a shutoff that a step names even when the guide is not tagged with its system', async () => {
+    fact({ kind: 'shutoff', system: 'electric', title: 'Breaker panel', whereNote: 'Garage, left wall' });
+    const steps = ['## Steps', '1. Check the AC breakers at the breaker panel.', '2. Call the AC company.'];
+    guide('ac-out', 'AC out', ['hvac'], 'home', ['## Title and scope', 'Hot.', '', ...steps, '', '## Escalation criteria', '- Heat stroke.', '', '## Do not', '- Open the unit.'].join('\n'));
+    const { html } = await get('/house/guide/ac-out');
+    const stepAt = html.indexOf('at the breaker panel.');
+    expect(stepAt).toBeGreaterThan(-1);
+    expect(html.indexOf('Garage, left wall')).toBeGreaterThan(stepAt);
+    expect(html).not.toContain('Your house');
+  });
+
+  it('puts a utility a step names inside that step instead of in Who to call', async () => {
+    fact({ kind: 'utility', system: 'electric', title: 'City Power', org: 'City Power', phone: '555-010-0400', instructions: 'Outage line, 24/7.' });
+    const steps = ['## Steps', '1. Whole street dark: report it to City Power.', '2. Just our house: check the panel.'];
+    guide('power-out', 'Power out', ['electric'], 'home', ['## Title and scope', 'Dark.', '', ...steps, '', '## Escalation criteria', '- A line is down.', '', '## Do not', '- Touch lines.'].join('\n'));
+    const { html } = await get('/house/guide/power-out');
+    expect(count(html, '555-010-0400')).toBeGreaterThanOrEqual(1);
+    expect(html.indexOf('555-010-0400')).toBeLessThan(html.indexOf('Call 911 if'));
+    expect(html).not.toContain('Who to call');
+  });
+});

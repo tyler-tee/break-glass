@@ -156,7 +156,7 @@ const FactForm: FC<{
       )} />
       <div data-kinds="shutoff">
         <Field id="where_note" label="Where is it?" hint="Needed for shutoffs." error={errors.where_note} control={(d, bad) => (
-          <input id="where_note" name="where_note" value={v.where_note} maxlength={300} autocomplete="off" aria-describedby={d} aria-invalid={bad ? 'true' : undefined} autofocus={first === 'where_note'} />
+          <textarea id="where_note" name="where_note" rows={2} maxlength={300} aria-describedby={d} aria-invalid={bad ? 'true' : undefined} autofocus={first === 'where_note'}>{v.where_note}</textarea>
         )} />
       </div>
       <div>

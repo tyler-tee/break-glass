@@ -114,6 +114,18 @@ export function guideLinks(db: Db, tags: readonly string[] | null | undefined, n
   return { ...linked, picks: picksFor(db, linked.trades, linked.ours, now, tz) };
 }
 
+/** Drops facts whose phone repeats an earlier one, e.g. one company entered as both our plumber and our AC company. */
+export function uniqueByPhone(facts: readonly HouseFact[]): HouseFact[] {
+  const seen = new Set<string>();
+  return facts.filter((f) => {
+    const p = normPhone(f.phone);
+    if (p === null) return true;
+    if (seen.has(p)) return false;
+    seen.add(p);
+    return true;
+  });
+}
+
 // ---- inline placement in steps ----
 
 const ENTITIES: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };

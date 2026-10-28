@@ -62,7 +62,7 @@ body {
 }
 a { color: inherit; }
 a, button, summary { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-h1, h2, p, ul, ol { margin: 0; }
+h1, h2, h3, p, ul, ol { margin: 0; }
 svg { flex-shrink: 0; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 

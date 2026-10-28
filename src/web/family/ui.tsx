@@ -228,6 +228,16 @@ export const InlineFact: FC<{ fact: HouseFact; photo?: PhotoRef | undefined }> =
         {fact.instructions ? <span class="subtle">{fact.instructions}</span> : null}
       </>
     )}
+    {fact.phone ? (
+      <div class="callrow">
+        <span class="text">
+          <span class="where">{fact.phone}</span>
+        </span>
+        <a class="btn btn-solid" href={telHref(fact.phone)} aria-label={`Call ${fact.org?.trim() || fact.title}, ${fact.phone}`}>
+          <Svg name="phone" /> Call
+        </a>
+      </div>
+    ) : null}
     {photo ? (
       <a class="photo" href={photoSrc(photo)}>
         <img src={photoSrc(photo)} alt={photo.caption ?? `Photo of ${fact.title}`} loading="lazy" />
