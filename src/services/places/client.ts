@@ -2,10 +2,13 @@ import { normalizeHours } from '../../domain/hours.js';
 import type { LatLng, TrackedFields } from '../../domain/types.js';
 import { BudgetExhausted, CallBudget } from './budget.js';
 import type {
+  PlaceCandidate,
   PlaceDetails,
   PlaceSummary,
   RawDetailsResponse,
   RawPlace,
+  RawRichPlace,
+  RawRichSearchResponse,
   RawSearchResponse,
 } from './types.js';
 
@@ -18,6 +21,28 @@ const SEARCH_MASK =
   'places.id,places.displayName,places.formattedAddress,places.location,places.businessStatus';
 const DETAILS_MASK =
   'id,displayName,formattedAddress,nationalPhoneNumber,websiteUri,location,rating,userRatingCount,businessStatus,regularOpeningHours';
+// Everything ranking needs in one Text Search. Reviews bill at Enterprise + Atmosphere; that is intended.
+// Google names the review age field relativePublishTimeDescription.
+export const RICH_SEARCH_MASK = [
+  'places.id',
+  'places.displayName',
+  'places.formattedAddress',
+  'places.shortFormattedAddress',
+  'places.location',
+  'places.businessStatus',
+  'places.primaryType',
+  'places.primaryTypeDisplayName',
+  'places.googleMapsUri',
+  'places.rating',
+  'places.userRatingCount',
+  'places.regularOpeningHours',
+  'places.currentOpeningHours.openNow',
+  'places.nationalPhoneNumber',
+  'places.websiteUri',
+  'places.reviews.text',
+  'places.reviews.rating',
+  'places.reviews.relativePublishTimeDescription',
+].join(',');
 
 export { BudgetExhausted, CallBudget };
 
@@ -63,22 +88,24 @@ const summarize = (p: RawPlace): PlaceSummary => ({
   businessStatus: p.businessStatus ?? null,
 });
 
+export type SearchBias = { center: LatLng; radiusMi: number };
+
+const biasCircle = (bias: SearchBias) => ({
+  circle: {
+    center: { latitude: bias.center.lat, longitude: bias.center.lng },
+    radius: Math.min(Math.round(bias.radiusMi * METERS_PER_MILE), MAX_RADIUS_METERS),
+  },
+});
+
 export async function textSearch(
   query: string,
-  bias: { center: LatLng; radiusMi: number } | undefined,
+  bias: SearchBias | undefined,
   deps: PlacesDeps,
 ): Promise<PlaceSummary[]> {
   const body = {
     textQuery: query,
     pageSize: 10,
-    ...(bias && {
-      locationBias: {
-        circle: {
-          center: { latitude: bias.center.lat, longitude: bias.center.lng },
-          radius: Math.min(Math.round(bias.radiusMi * METERS_PER_MILE), MAX_RADIUS_METERS),
-        },
-      },
-    }),
+    ...(bias && { locationBias: biasCircle(bias) }),
   };
   const data = await placesRequest<RawSearchResponse>(
     `${BASE_URL}/places:searchText`,
@@ -95,6 +122,52 @@ export async function textSearch(
   );
   // The search mask omits rating fields (they bill at the Enterprise SKU); ratings come from details.
   return (data.places ?? []).map((p) => ({ ...summarize(p), rating: null, ratingCount: null }));
+}
+
+const toCandidate = (p: RawRichPlace): PlaceCandidate => {
+  const oh = p.regularOpeningHours;
+  return {
+    placeId: p.id,
+    name: p.displayName.text,
+    address: p.formattedAddress ?? null,
+    shortAddress: p.shortFormattedAddress ?? null,
+    lat: p.location.latitude,
+    lng: p.location.longitude,
+    businessStatus: p.businessStatus ?? null,
+    rating: p.rating ?? null,
+    ratingCount: p.userRatingCount ?? null,
+    phone: p.nationalPhoneNumber ?? null,
+    website: p.websiteUri ?? null,
+    primaryType: p.primaryType ?? null,
+    primaryTypeDisplay: p.primaryTypeDisplayName?.text ?? null,
+    mapsUri: p.googleMapsUri ?? null,
+    hours: normalizeHours(oh?.periods, oh?.weekdayDescriptions),
+    openNow: p.currentOpeningHours?.openNow ?? null,
+    reviews: (p.reviews ?? []).map((r) => ({
+      text: r.text?.text ?? null,
+      rating: r.rating ?? null,
+      relativePublishTime: r.relativePublishTimeDescription ?? null,
+    })),
+  };
+};
+
+/** One Text Search per term with the full ranking field mask; replaces search-then-details for discovery. */
+export async function richSearch(term: string, bias: SearchBias, deps: PlacesDeps): Promise<PlaceCandidate[]> {
+  const body = { textQuery: term, pageSize: 20, rankPreference: 'RELEVANCE', locationBias: biasCircle(bias) };
+  const data = await placesRequest<RawRichSearchResponse>(
+    `${BASE_URL}/places:searchText`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': deps.apiKey,
+        'X-Goog-FieldMask': RICH_SEARCH_MASK,
+      },
+      body: JSON.stringify(body),
+    },
+    deps,
+  );
+  return (data.places ?? []).map(toCandidate);
 }
 
 export async function placeDetails(placeId: string, deps: PlacesDeps): Promise<PlaceDetails> {
@@ -130,6 +203,23 @@ export function detailsToTracked(d: PlaceDetails): TrackedFields {
     businessStatus: d.businessStatus,
     rating: d.rating,
     ratingCount: d.ratingCount,
+    afterHoursNotes: null,
+    walkIns: null,
+    insuranceNotes: null,
+  };
+}
+
+/** The tracked (snapshotted) fields of a search result; reviews are never stored. */
+export function candidateToTracked(c: PlaceCandidate): TrackedFields {
+  return {
+    name: c.name,
+    address: c.address,
+    phone: c.phone,
+    website: c.website,
+    hours: c.hours,
+    businessStatus: c.businessStatus,
+    rating: c.rating,
+    ratingCount: c.ratingCount,
     afterHoursNotes: null,
     walkIns: null,
     insuranceNotes: null,

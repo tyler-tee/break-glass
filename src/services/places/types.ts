@@ -18,6 +18,29 @@ export type PlaceDetails = PlaceSummary & {
   hours: WeeklyHours | null;
 };
 
+export type PlaceReview = { text: string | null; rating: number | null; relativePublishTime: string | null };
+
+/** One Text Search result with everything ranking needs, so no Details call per place. */
+export type PlaceCandidate = {
+  placeId: string;
+  name: string;
+  address: string | null;
+  shortAddress: string | null;
+  lat: number;
+  lng: number;
+  businessStatus: BusinessStatus | null;
+  rating: number | null;
+  ratingCount: number | null;
+  phone: string | null;
+  website: string | null;
+  primaryType: string | null;
+  primaryTypeDisplay: string | null;
+  mapsUri: string | null;
+  hours: WeeklyHours | null;
+  openNow: boolean | null;
+  reviews: PlaceReview[]; // prompt-only, never persisted
+};
+
 export type RawPlace = {
   id: string;
   displayName: { text: string };
@@ -35,3 +58,20 @@ export type RawDetailsResponse = RawPlace & {
   websiteUri?: string;
   regularOpeningHours?: { periods?: PlacesPeriod[]; weekdayDescriptions?: string[] };
 };
+
+export type RawReview = {
+  text?: { text?: string; languageCode?: string };
+  rating?: number;
+  relativePublishTimeDescription?: string;
+};
+
+export type RawRichPlace = RawDetailsResponse & {
+  shortFormattedAddress?: string;
+  primaryType?: string;
+  primaryTypeDisplayName?: { text: string };
+  googleMapsUri?: string;
+  currentOpeningHours?: { openNow?: boolean };
+  reviews?: RawReview[];
+};
+
+export type RawRichSearchResponse = { places?: RawRichPlace[] };

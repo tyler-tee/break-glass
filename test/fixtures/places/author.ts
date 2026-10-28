@@ -30,7 +30,214 @@ const weekday = [1, 2, 3, 4, 5].map((day) => ({
   close: { day, hour: 17, minute: 0 },
 }));
 
+// richSearch: one Text Search per term with the ranking field mask (pageSize 20, relevance, same bias circle).
+const richBody = (query: string) =>
+  JSON.stringify({
+    textQuery: query,
+    pageSize: 20,
+    rankPreference: 'RELEVANCE',
+    locationBias: {
+      circle: {
+        center: { latitude: CENTER.lat, longitude: CENTER.lng },
+        radius: Math.min(Math.round(15 * 1609.344), 50000),
+      },
+    },
+  });
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const daily = (open: [number, number], close: [number, number], nextDay: boolean) =>
+  [0, 1, 2, 3, 4, 5, 6].map((day) => ({
+    open: { day, hour: open[0], minute: open[1] },
+    close: { day: nextDay ? (day + 1) % 7 : day, hour: close[0], minute: close[1] },
+  }));
+const allDay = {
+  periods: [{ open: { day: 0, hour: 0, minute: 0 } }],
+  weekdayDescriptions: DAY_NAMES.map((d) => `${d}: Open 24 hours`),
+};
+const review = (text: string, rating: number, when: string) => ({
+  text: { text, languageCode: 'en' },
+  rating,
+  relativePublishTimeDescription: when,
+});
+const pharmacyType = { primaryType: 'pharmacy', primaryTypeDisplayName: { text: 'Pharmacy', languageCode: 'en' } };
+
+const cvs = {
+  id: 'ChIJcvs24',
+  displayName: { text: 'CVS Pharmacy', languageCode: 'en' },
+  formattedAddress: '1400 S 700 E, Salt Lake City, UT 84105, USA',
+  shortFormattedAddress: '1400 S 700 E, Salt Lake City',
+  location: { latitude: 40.75, longitude: -111.891 },
+  businessStatus: 'OPERATIONAL',
+  ...pharmacyType,
+  googleMapsUri: 'https://maps.google.com/?cid=1001',
+  rating: 3.8,
+  userRatingCount: 121,
+  // Open around the clock except the pharmacist's 1:30–2 PM lunch, as CVS reports it.
+  regularOpeningHours: {
+    periods: daily([14, 0], [13, 30], true),
+    weekdayDescriptions: DAY_NAMES.map((d) => `${d}: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM`),
+  },
+  currentOpeningHours: { openNow: true },
+  nationalPhoneNumber: '(801) 555-0300',
+  websiteUri: 'https://cvs.example/store/1400',
+  reviews: [
+    review('Pharmacist stayed late to fill an antibiotic for my son at 2am. Lifesaver.', 5, 'a month ago'),
+    review(
+      'The drive-thru line is always long and the pharmacy staff seem overwhelmed, but they did get my "urgent" prescription right eventually after a fairly long wait of nearly forty minutes on a weeknight.',
+      3,
+      '3 months ago',
+    ),
+    review('Rude at the counter.', 1, '5 months ago'),
+    review('Open all night, that is what matters.', 4, 'a year ago'),
+    review('Clean store.', 4, 'a year ago'),
+    review('Sixth review that must be dropped from the prompt.', 5, '2 years ago'),
+  ],
+};
+const walgreensSuite = {
+  id: 'ChIJwag1',
+  displayName: { text: 'Walgreens Pharmacy', languageCode: 'en' },
+  formattedAddress: '350 E 400 S #2, Salt Lake City, UT 84111, USA',
+  shortFormattedAddress: '350 E 400 S #2, Salt Lake City',
+  location: { latitude: 40.76, longitude: -111.879 },
+  businessStatus: 'OPERATIONAL',
+  ...pharmacyType,
+  googleMapsUri: 'https://maps.google.com/?cid=1002',
+  rating: 4.1,
+  userRatingCount: 412,
+  regularOpeningHours: allDay,
+  currentOpeningHours: { openNow: true },
+  nationalPhoneNumber: '(801) 555-0301',
+  websiteUri: 'https://walgreens.example/store/350',
+  reviews: [review('Always someone at the pharmacy counter, even overnight.', 5, '2 weeks ago')],
+};
+// The same building listed again without the suite: the duplicate the pre-pass must catch.
+const walgreensDup = {
+  ...walgreensSuite,
+  id: 'ChIJwag2',
+  displayName: { text: 'Walgreens', languageCode: 'en' },
+  formattedAddress: '350 E 400 S, Salt Lake City, UT 84111, USA',
+  shortFormattedAddress: '350 E 400 S, Salt Lake City',
+  location: { latitude: 40.76005, longitude: -111.87905 },
+  primaryType: 'drugstore',
+  primaryTypeDisplayName: { text: 'Drugstore', languageCode: 'en' },
+  googleMapsUri: 'https://maps.google.com/?cid=1003',
+  rating: 3.9,
+  userRatingCount: 38,
+  reviews: [],
+};
+// A junk listing: 24/7 on paper, no ratings, not a pharmacy.
+const junk = {
+  id: 'ChIJjunk',
+  displayName: { text: 'Pharma Anabolics Shop', languageCode: 'en' },
+  formattedAddress: '726 Grove Ave, Salt Lake City, UT 84104, USA',
+  shortFormattedAddress: '726 Grove Ave, Salt Lake City',
+  location: { latitude: 40.73, longitude: -111.9 },
+  businessStatus: 'OPERATIONAL',
+  primaryType: 'store',
+  primaryTypeDisplayName: { text: 'Store', languageCode: 'en' },
+  googleMapsUri: 'https://maps.google.com/?cid=1004',
+  regularOpeningHours: allDay,
+};
+const riteAid = {
+  id: 'ChIJriteaid',
+  displayName: { text: 'Rite Aid', languageCode: 'en' },
+  formattedAddress: '200 S State St, Salt Lake City, UT 84111, USA',
+  shortFormattedAddress: '200 S State St, Salt Lake City',
+  location: { latitude: 40.765, longitude: -111.888 },
+  businessStatus: 'CLOSED_PERMANENTLY',
+  ...pharmacyType,
+  rating: 4.0,
+  userRatingCount: 90,
+};
+// About 38 miles out, past the 15-mile radius.
+const provo = {
+  id: 'ChIJprovo',
+  displayName: { text: 'Provo 24 Hour Pharmacy', languageCode: 'en' },
+  formattedAddress: '1 N University Ave, Provo, UT 84601, USA',
+  shortFormattedAddress: '1 N University Ave, Provo',
+  location: { latitude: 40.2338, longitude: -111.6585 },
+  businessStatus: 'OPERATIONAL',
+  ...pharmacyType,
+  rating: 4.5,
+  userRatingCount: 300,
+  regularOpeningHours: allDay,
+};
+const dayPharmacy = {
+  id: 'ChIJday',
+  displayName: { text: 'Main Street Pharmacy', languageCode: 'en' },
+  formattedAddress: '50 W Broadway, Salt Lake City, UT 84101, USA',
+  shortFormattedAddress: '50 W Broadway, Salt Lake City',
+  location: { latitude: 40.762, longitude: -111.893 },
+  businessStatus: 'OPERATIONAL',
+  ...pharmacyType,
+  rating: 4.8,
+  userRatingCount: 240,
+  regularOpeningHours: {
+    periods: daily([9, 0], [21, 0], false),
+    weekdayDescriptions: DAY_NAMES.map((d) => `${d}: 9:00 AM – 9:00 PM`),
+  },
+  currentOpeningHours: { openNow: false },
+  nationalPhoneNumber: '(801) 555-0310',
+};
+const smiths = {
+  id: 'ChIJsmiths',
+  displayName: { text: "Smith's Pharmacy", languageCode: 'en' },
+  formattedAddress: '455 S 500 E, Salt Lake City, UT 84102, USA',
+  shortFormattedAddress: '455 S 500 E, Salt Lake City',
+  location: { latitude: 40.758, longitude: -111.877 },
+  businessStatus: 'CLOSED_TEMPORARILY',
+  ...pharmacyType,
+  rating: 4.3,
+  userRatingCount: 150,
+  regularOpeningHours: allDay,
+};
+const instacare = {
+  id: 'ChIJinstacare',
+  displayName: { text: 'Instacare Downtown', languageCode: 'en' },
+  formattedAddress: '389 S 900 E, Salt Lake City, UT 84102, USA',
+  shortFormattedAddress: '389 S 900 E, Salt Lake City',
+  location: { latitude: 40.761, longitude: -111.865 },
+  businessStatus: 'OPERATIONAL',
+  primaryType: 'medical_clinic',
+  primaryTypeDisplayName: { text: 'Medical clinic', languageCode: 'en' },
+  rating: 4.2,
+  userRatingCount: 300,
+  regularOpeningHours: {
+    periods: daily([8, 0], [20, 0], false),
+    weekdayDescriptions: DAY_NAMES.map((d) => `${d}: 8:00 AM – 8:00 PM`),
+  },
+  nationalPhoneNumber: '(801) 555-0400',
+  websiteUri: 'https://instacare.example',
+};
+const weekdayClinic = {
+  id: 'ChIJclinic',
+  displayName: { text: 'Avenues Family Clinic', languageCode: 'en' },
+  formattedAddress: '100 N E St, Salt Lake City, UT 84103, USA',
+  shortFormattedAddress: '100 N E St, Salt Lake City',
+  location: { latitude: 40.772, longitude: -111.878 },
+  businessStatus: 'OPERATIONAL',
+  primaryType: 'doctor',
+  primaryTypeDisplayName: { text: 'Doctor', languageCode: 'en' },
+  rating: 4.9,
+  userRatingCount: 12,
+  regularOpeningHours: { periods: weekday, weekdayDescriptions: weekdayText },
+};
+
+function authorRich(): void {
+  const rich = (query: string, places: unknown[]) =>
+    authorFixture(
+      FIXTURE_DIR,
+      { method: 'POST', url: `${BASE}/places:searchText`, body: richBody(query) },
+      { status: 200, json: places.length > 0 ? { places } : {} },
+    );
+  rich('24 hour pharmacy', [cvs, walgreensSuite, walgreensDup, junk, riteAid, provo]);
+  rich('late night pharmacy', [cvs, dayPharmacy, smiths]);
+  rich('urgent care', [instacare, weekdayClinic]);
+  rich('nothing open zzz', []);
+}
+
 function main(): void {
+  authorRich();
   authorFixture(
     FIXTURE_DIR,
     { method: 'POST', url: `${BASE}/places:searchText`, body: searchBody('emergency dentist') },

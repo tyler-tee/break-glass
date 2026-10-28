@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { describeHours, isOpenNow, normalizeHours } from '../../src/domain/hours.js';
+import { describeHours, hoursProfile, isOpenNow, normalizeHours } from '../../src/domain/hours.js';
 import type { WeeklyHours } from '../../src/domain/types.js';
 
 const TZ = 'America/Denver';
@@ -125,5 +125,80 @@ describe('describeHours', () => {
     // The same instant is Sat 10:30 PM in New York (closed) but Sat 7:30 PM in Los Angeles (open).
     expect(describeHours(h, new Date('2026-11-01T02:30:00Z'), NY)).toEqual({ state: 'closed', label: 'opens Sat 8 AM' });
     expect(describeHours(h, new Date('2026-11-01T02:30:00Z'), 'America/Los_Angeles')).toEqual({ state: 'open', label: 'until 9 PM' });
+  });
+});
+
+describe('hoursProfile', () => {
+  const every = (open: string, close: string) => {
+    const iv = () => [{ open, close }];
+    return hoursWith({ '0': iv(), '1': iv(), '2': iv(), '3': iv(), '4': iv(), '5': iv(), '6': iv() });
+  };
+
+  it('24/7 is "24 hours" with no gap note', () => {
+    const p = hoursProfile(normalizeHours([{ open: { day: 0, hour: 0, minute: 0 } }]));
+    expect(p).toEqual({ open24h: true, summary: '24 hours', eveningsOrWeekends: true });
+  });
+
+  it('2 PM to 1:30 PM every day is 24 hours with a daily pharmacist break', () => {
+    const p = hoursProfile(every('1400', '1330'));
+    expect(p).toMatchObject({ open24h: true, summary: '24 hours', dailyGapNote: 'Closed 1:30–2 PM daily' });
+  });
+
+  it('2 AM to 1:30 AM every day notes the night-time break', () => {
+    expect(hoursProfile(every('0200', '0130'))).toMatchObject({ open24h: true, dailyGapNote: 'Closed 1:30–2 AM daily' });
+  });
+
+  it('a split day closed overnight is not 24 hours but counts as evenings', () => {
+    const iv = () => [
+      { open: '0800', close: '1330' },
+      { open: '1400', close: '0000' },
+    ];
+    const p = hoursProfile(hoursWith({ '0': iv(), '1': iv(), '2': iv(), '3': iv(), '4': iv(), '5': iv(), '6': iv() }));
+    expect(p.open24h).toBe(false);
+    expect(p.eveningsOrWeekends).toBe(true);
+    expect(p.summary).toBe('Daily 8 AM – 1:30 PM, 2 PM – midnight');
+  });
+
+  it('7 AM to 11 PM every day is not 24 hours', () => {
+    expect(hoursProfile(every('0700', '2300'))).toEqual({
+      open24h: false,
+      summary: 'Daily 7 AM – 11 PM',
+      eveningsOrWeekends: true,
+    });
+  });
+
+  it('Mon–Fri 8 to 5 is "Weekdays" and not evenings or weekends', () => {
+    const iv = () => [{ open: '0800', close: '1700' }];
+    expect(hoursProfile(hoursWith({ '1': iv(), '2': iv(), '3': iv(), '4': iv(), '5': iv() }))).toEqual({
+      open24h: false,
+      summary: 'Weekdays 8 AM – 5 PM',
+      eveningsOrWeekends: false,
+    });
+  });
+
+  it('10 AM to 8 PM every day is "Daily" and counts as evenings', () => {
+    expect(hoursProfile(every('1000', '2000'))).toEqual({
+      open24h: false,
+      summary: 'Daily 10 AM – 8 PM',
+      eveningsOrWeekends: true,
+    });
+  });
+
+  it('null or empty hours are unknown', () => {
+    const unknown = { open24h: false, summary: 'Hours unknown', eveningsOrWeekends: false };
+    expect(hoursProfile(null)).toEqual(unknown);
+    expect(hoursProfile(hoursWith({}))).toEqual(unknown);
+  });
+
+  it('one 24-hour Monday is not open 24 hours', () => {
+    const p = hoursProfile(hoursWith({ '1': [{ open: '0000', close: '0000' }] }));
+    expect(p.open24h).toBe(false);
+    expect(p.summary).toBe('Varies by day');
+  });
+
+  it('a Saturday-only morning counts as weekends', () => {
+    const iv = () => [{ open: '0900', close: '1700' }];
+    const p = hoursProfile(hoursWith({ '1': iv(), '2': iv(), '3': iv(), '4': iv(), '5': iv(), '6': [{ open: '0900', close: '1200' }] }));
+    expect(p).toEqual({ open24h: false, summary: 'Varies by day', eveningsOrWeekends: true });
   });
 });

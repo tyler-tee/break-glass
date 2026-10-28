@@ -5,9 +5,12 @@ import {
   BudgetExhausted,
   CallBudget,
   PlacesError,
+  RICH_SEARCH_MASK,
+  candidateToTracked,
   detailsToTracked,
   geocode,
   placeDetails,
+  richSearch,
   textSearch,
   type PlacesDeps,
 } from '../../src/services/places/client.js';
@@ -136,6 +139,91 @@ describe('places client', () => {
   it('geocode returns first hit or null', async () => {
     expect(await geocode('100 S Main St, Salt Lake City', deps())).toEqual({ lat: 40.775, lng: -111.891 });
     expect(await geocode('nowhere zzz', deps())).toBeNull();
+  });
+
+  it('richSearch sends one enterprise search with the ranking mask and maps every field', async () => {
+    const real = recordingFetch(FIXTURE_DIR, 'replay');
+    const seen: { headers: Record<string, string>; body: unknown }[] = [];
+    const spy = ((input: string | URL | Request, init?: RequestInit) => {
+      seen.push({ headers: init?.headers as Record<string, string>, body: JSON.parse(String(init?.body)) });
+      return real(input, init);
+    }) as typeof fetch;
+    const d = deps({ fetch: spy });
+
+    const out = await richSearch('24 hour pharmacy', BIAS, d);
+
+    expect(d.budget.used).toBe(1);
+    expect(seen[0]!.body).toEqual({
+      textQuery: '24 hour pharmacy',
+      pageSize: 20,
+      rankPreference: 'RELEVANCE',
+      locationBias: { circle: { center: { latitude: 40.7608, longitude: -111.891 }, radius: 24140 } },
+    });
+    const mask = seen[0]!.headers['X-Goog-FieldMask']!;
+    expect(mask).toBe(RICH_SEARCH_MASK);
+    for (const f of ['places.reviews.text', 'places.rating', 'places.currentOpeningHours.openNow', 'places.googleMapsUri']) {
+      expect(mask.split(',')).toContain(f);
+    }
+    expect(out.map((p) => p.placeId)).toEqual(['ChIJcvs24', 'ChIJwag1', 'ChIJwag2', 'ChIJjunk', 'ChIJriteaid', 'ChIJprovo']);
+    const cvs = out[0]!;
+    expect(cvs).toMatchObject({
+      name: 'CVS Pharmacy',
+      address: '1400 S 700 E, Salt Lake City, UT 84105, USA',
+      shortAddress: '1400 S 700 E, Salt Lake City',
+      lat: 40.75,
+      lng: -111.891,
+      businessStatus: 'OPERATIONAL',
+      rating: 3.8,
+      ratingCount: 121,
+      phone: '(801) 555-0300',
+      website: 'https://cvs.example/store/1400',
+      primaryType: 'pharmacy',
+      primaryTypeDisplay: 'Pharmacy',
+      mapsUri: 'https://maps.google.com/?cid=1001',
+      openNow: true,
+    });
+    // The pharmacist's lunch break: 2 PM to 1:30 PM the next day, every day.
+    expect(cvs.hours?.periods['3']).toEqual([{ open: '1400', close: '1330' }]);
+    expect(cvs.reviews).toHaveLength(6);
+    expect(cvs.reviews[0]).toEqual({
+      text: 'Pharmacist stayed late to fill an antibiotic for my son at 2am. Lifesaver.',
+      rating: 5,
+      relativePublishTime: 'a month ago',
+    });
+  });
+
+  it('richSearch leaves missing fields null and keeps closed places for the pre-pass to judge', async () => {
+    const out = await richSearch('24 hour pharmacy', BIAS, deps());
+    const junk = out.find((p) => p.placeId === 'ChIJjunk')!;
+    expect(junk).toMatchObject({ rating: null, ratingCount: null, phone: null, website: null, openNow: null, reviews: [] });
+    expect(junk.hours?.periods['0']).toEqual([{ open: '0000', close: '2400' }]);
+    const gone = out.find((p) => p.placeId === 'ChIJriteaid')!;
+    expect(gone).toMatchObject({ businessStatus: 'CLOSED_PERMANENTLY', hours: null, mapsUri: null });
+    expect(await richSearch('nothing open zzz', BIAS, deps())).toEqual([]);
+  });
+
+  it('richSearch is budgeted like textSearch', async () => {
+    const d = deps({ budget: new CallBudget(0) });
+    await expect(richSearch('24 hour pharmacy', BIAS, d)).rejects.toBeInstanceOf(BudgetExhausted);
+  });
+
+  it('candidateToTracked keeps the tracked fields and drops reviews', async () => {
+    const [cvs] = await richSearch('24 hour pharmacy', BIAS, deps());
+    const tracked = candidateToTracked(cvs!);
+    expect(tracked).toEqual({
+      name: 'CVS Pharmacy',
+      address: '1400 S 700 E, Salt Lake City, UT 84105, USA',
+      phone: '(801) 555-0300',
+      website: 'https://cvs.example/store/1400',
+      hours: cvs!.hours,
+      businessStatus: 'OPERATIONAL',
+      rating: 3.8,
+      ratingCount: 121,
+      afterHoursNotes: null,
+      walkIns: null,
+      insuranceNotes: null,
+    });
+    expect(JSON.stringify(tracked)).not.toContain('Lifesaver');
   });
 
   it('fixture directory is not written during replay', () => {

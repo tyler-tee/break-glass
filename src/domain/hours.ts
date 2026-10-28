@@ -93,7 +93,7 @@ export function formatClock(minuteOfDay: number): string {
 
 // The week as merged [start, end) spans in minutes from Sunday 00:00. Overnight spans run past the
 // day boundary, and a span may run past the end of the week (it then wraps to Sunday).
-function weekSpans(hours: WeeklyHours): [number, number][] {
+export function weekSpans(hours: WeeklyHours): [number, number][] {
   const spans: [number, number][] = [];
   for (let d = 0; d < 7; d++) {
     for (const iv of hours.periods[String(d) as DayKey]) {
@@ -143,4 +143,100 @@ export function describeHours(hours: WeeklyHours | null, now: Date, tz: string):
   }
   const next = spans.find(([s]) => s > t) ?? spans[0]!;
   return { state: 'closed', label: `opens ${at(next[0])}` };
+}
+
+export type HoursProfile = {
+  /** Open around the clock, allowing one short daily break (a pharmacist's lunch). */
+  open24h: boolean;
+  /** "Closed 1:30–2 PM daily": the break an open24h place still takes. */
+  dailyGapNote?: string;
+  summary: string;
+  /** Closes after 6 PM on some day, or opens on a weekend. */
+  eveningsOrWeekends: boolean;
+};
+
+const MIN_COVERED_24H = 1380;
+const MAX_GAP_24H = 60;
+const EVENING_MIN = 18 * 60;
+
+/** "1:30–2 PM", "11 PM–1 AM": the meridiem is written once when both ends share it. */
+function clockRange(from: number, to: number, sep: string): string {
+  const a = formatClock(from);
+  const b = formatClock(to);
+  const shared = a.slice(-3) === b.slice(-3) && / [AP]M$/.test(a) ? a.slice(0, -3) : a;
+  return `${shared}${sep}${b}`;
+}
+
+// Closed stretches between merged spans, in absolute minutes; a gap may run past the end of the week.
+function weekGaps(spans: [number, number][]): [number, number][] {
+  if (spans.length === 0) return [[0, WEEK_MIN]];
+  if (spans.some(([s, e]) => e - s >= WEEK_MIN)) return [];
+  const gaps: [number, number][] = [];
+  spans.forEach(([, end], i) => {
+    const next = i + 1 < spans.length ? spans[i + 1]![0] : spans[0]![0] + WEEK_MIN;
+    if (next > end) gaps.push([end, next]);
+  });
+  return gaps;
+}
+
+const overlap = (a: [number, number], b: [number, number]): number => Math.max(0, Math.min(a[1], b[1]) - Math.max(a[0], b[0]));
+
+const sameIntervals = (a: Interval[], b: Interval[]): boolean =>
+  a.length === b.length && a.every((iv, i) => iv.open === b[i]!.open && iv.close === b[i]!.close);
+
+const intervalText = (ivs: Interval[]): string =>
+  ivs.map((iv) => `${formatClock(toMin(iv.open))} – ${formatClock(toMin(iv.close))}`).join(', ');
+
+/** What ranking needs to know about a weekly schedule: 24 hours or not, a one-line summary, evenings/weekends. */
+export function hoursProfile(hours: WeeklyHours | null): HoursProfile {
+  const days = hours ? ([0, 1, 2, 3, 4, 5, 6] as const).map((d) => hours.periods[String(d) as DayKey]) : [];
+  if (!hours || days.every((ivs) => ivs.length === 0)) {
+    return { open24h: false, summary: 'Hours unknown', eveningsOrWeekends: false };
+  }
+
+  const gaps = weekGaps(weekSpans(hours));
+  let open24h = true;
+  for (let d = 0; d < 7; d++) {
+    let closed = 0;
+    let maxGap = 0;
+    for (const g of gaps) {
+      // A gap past the end of the week belongs to the start of it, so test both copies of the day.
+      const inDay =
+        overlap(g, [d * DAY_MIN, (d + 1) * DAY_MIN]) + overlap(g, [d * DAY_MIN + WEEK_MIN, (d + 1) * DAY_MIN + WEEK_MIN]);
+      closed += inDay;
+      maxGap = Math.max(maxGap, inDay);
+    }
+    if (DAY_MIN - closed < MIN_COVERED_24H || maxGap > MAX_GAP_24H) open24h = false;
+  }
+
+  let dailyGapNote: string | undefined;
+  if (open24h && gaps.length > 0) {
+    const times = gaps.map(([s, e]) => clockRange(s, e, '–'));
+    dailyGapNote = times.every((t) => t === times[0])
+      ? `Closed ${times[0]} ${gaps.length === 7 ? 'daily' : 'some days'}`
+      : 'Short closures that vary by day';
+  }
+
+  const weekdays = days.slice(1, 6);
+  let summary: string;
+  if (open24h) summary = '24 hours';
+  else if (days.every((ivs) => ivs.length > 0 && sameIntervals(ivs, days[0]!))) summary = `Daily ${intervalText(days[0]!)}`;
+  else if (
+    weekdays.every((ivs) => ivs.length > 0 && sameIntervals(ivs, weekdays[0]!)) &&
+    days[0]!.length === 0 &&
+    days[6]!.length === 0
+  ) {
+    summary = `Weekdays ${intervalText(weekdays[0]!)}`;
+  } else summary = 'Varies by day';
+
+  const lateClose = days.some((ivs) =>
+    ivs.some((iv) => {
+      const open = toMin(iv.open);
+      const close = toMin(iv.close);
+      return close <= open || close > EVENING_MIN;
+    }),
+  );
+  const weekend = days[0]!.length > 0 || days[6]!.length > 0;
+
+  return { open24h, ...(dailyGapNote ? { dailyGapNote } : {}), summary, eveningsOrWeekends: lateClose || weekend };
 }

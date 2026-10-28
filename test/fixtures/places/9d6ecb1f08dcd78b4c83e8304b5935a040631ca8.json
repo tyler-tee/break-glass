@@ -1,0 +1,9 @@
+{
+  "method": "POST",
+  "url": "https://places.googleapis.com/v1/places:searchText",
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{}"
+}
