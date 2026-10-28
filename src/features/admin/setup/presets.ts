@@ -50,13 +50,12 @@ export type GuidePreset = { title: string; tags: readonly string[] };
 
 /**
  * Starter home guides. Tags link each guide to house facts (by system: water, gas, electric, hvac) and to the
- * trade that fixes it (by category slug). The admin supplies and checks the sources.
+ * trade that fixes it (by category slug). The admin supplies and checks the sources. A gas-or-CO guide is on hold
+ * (the household's call, 2026-10-28).
  */
 export const HOME_GUIDE_PRESETS: readonly GuidePreset[] = [
-  { title: 'Smell gas', tags: ['gas'] },
   { title: 'Burst pipe or major leak', tags: ['water', 'emergency-plumber', 'water-damage-restoration'] },
   { title: 'Power out or breaker tripped', tags: ['electric', 'emergency-electrician'] },
   { title: 'AC out in the heat', tags: ['hvac', 'heating-cooling-repair'] },
   { title: 'Toilet overflow', tags: ['water', 'emergency-plumber'] },
-  { title: 'CO alarm going off', tags: ['gas', 'hvac'] },
 ];
