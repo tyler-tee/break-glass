@@ -3,6 +3,10 @@ import path from 'node:path';
 import { buildExtractionPrompt } from '../../../src/services/llm/extract.js';
 import { buildDraftPrompt } from '../../../src/services/llm/draft.js';
 import { fetchPage, fetchWebsiteText } from '../../../src/services/llm/web.js';
+import { buildRankPrompt, prepass, rankPlaceFromCandidate } from '../../../src/services/llm/rankPlaces.js';
+import { CallBudget, richSearch } from '../../../src/services/places/client.js';
+import type { PlaceCandidate } from '../../../src/services/places/types.js';
+import { recordingFetch } from '../../helpers/recordingFetch.js';
 import { authorLlmFixture } from '../../helpers/authorLlmFixture.js';
 import { fakeSiteFetch } from '../../helpers/fakeSiteFetch.js';
 
@@ -52,6 +56,36 @@ async function authorDraft(): Promise<void> {
   );
 }
 
+// The 24-hour pharmacy ranking, built from the replayed Places fixtures exactly as a find run builds it.
+export const RANK_HOME = { lat: 40.7608, lng: -111.891 };
+async function authorRanking(): Promise<void> {
+  const places = {
+    fetch: recordingFetch(path.resolve(import.meta.dirname, '../places'), 'replay'),
+    apiKey: 'test',
+    budget: new CallBudget(10),
+  };
+  const merged = new Map<string, PlaceCandidate>();
+  for (const term of ['24 hour pharmacy', 'late night pharmacy']) {
+    for (const c of await richSearch(term, { center: RANK_HOME, radiusMi: 15 }, places)) {
+      if (!merged.has(c.placeId)) merged.set(c.placeId, c);
+    }
+  }
+  const { kept } = prepass([...merged.values()].map(rankPlaceFromCandidate), { home: RANK_HOME, radiusMi: 15 });
+  const { system, prompt } = buildRankPrompt({ name: '24-hour pharmacy', hoursNeed: 'overnight' }, kept);
+  const ref = (name: string) => kept.find((k) => k.place.name === name)!.ref;
+  const raw = JSON.stringify({
+    places: [
+      { ref: ref('Walgreens Pharmacy'), verdict: 'pick', rank: 1, reason: 'Nearest true 24-hour pharmacy, 4.1★ over 412 reviews.', flags: [] },
+      { ref: ref('CVS Pharmacy'), verdict: 'pick', rank: 2, reason: 'Open 24 hours apart from a 1:30–2 PM pharmacist break; mixed reviews.', flags: [] },
+      { ref: ref('Walgreens'), verdict: 'avoid', rank: 3, reason: 'Same store as the Walgreens Pharmacy listing.', flags: ['duplicate'] },
+      { ref: ref('Main Street Pharmacy'), verdict: 'avoid', rank: 4, reason: 'Well rated but closes at 9 PM.', flags: ['not_24h'] },
+      { ref: ref("Smith's Pharmacy"), verdict: 'avoid', rank: 5, reason: 'Google lists it as temporarily closed.', flags: ['closed_temporarily'] },
+      { ref: ref('Pharma Anabolics Shop'), verdict: 'avoid', rank: 6, reason: 'Not a pharmacy, and no reviews.', flags: ['wrong_kind', 'few_reviews'] },
+    ],
+  });
+  console.log(authorLlmFixture(LLM_DIR, { model: DRAFT_MODEL, system, prompt }, raw));
+}
+
 async function main(): Promise<void> {
   await author(
     'https://near-dental.example/',
@@ -69,6 +103,7 @@ async function main(): Promise<void> {
   );
   await author('https://bad-dental.example/', 'not json at all');
   await authorDraft();
+  await authorRanking();
 }
 
 await main();

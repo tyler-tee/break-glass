@@ -1,0 +1,1714 @@
+{
+  "_note": "Trimmed from the homelab export on 2026-10-28 (St Cloud FL, radius 30 mi): the 24-hour pharmacy and pediatrician rows. Real data; do not edit.",
+  "home": {
+    "lat": 28.2570187,
+    "lng": -81.27087310000002
+  },
+  "radiusMi": 30,
+  "pharmacy": [
+    {
+      "name": "Navarro Discount Pharmacy",
+      "address": "1205 W Vine St, Kissimmee, FL 34741, USA",
+      "distanceMi": 9.472,
+      "rating": 3.4,
+      "ratingCount": 708,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "1": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "2": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "3": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "4": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "5": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "6": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Tuesday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Wednesday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Thursday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Friday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Saturday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Sunday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM"
+        ]
+      }
+    },
+    {
+      "name": "CVS Pharmacy y más",
+      "address": "4500 Pleasant Hill Rd, Kissimmee, FL 34746, USA",
+      "distanceMi": 12.507,
+      "rating": 3.8,
+      "ratingCount": 121,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "1": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "2": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "3": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "4": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "5": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "6": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Tuesday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Wednesday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Thursday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Friday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Saturday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Sunday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM"
+        ]
+      }
+    },
+    {
+      "name": "Walgreens Pharmacy",
+      "address": "395 Cypress Pkwy, Kissimmee, FL 34759, USA",
+      "distanceMi": 14.485,
+      "rating": 3.2,
+      "ratingCount": 136,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "0200",
+              "close": "0130"
+            }
+          ],
+          "1": [
+            {
+              "open": "0200",
+              "close": "0130"
+            }
+          ],
+          "2": [
+            {
+              "open": "0200",
+              "close": "0130"
+            }
+          ],
+          "3": [
+            {
+              "open": "0200",
+              "close": "0130"
+            }
+          ],
+          "4": [
+            {
+              "open": "0200",
+              "close": "0130"
+            }
+          ],
+          "5": [
+            {
+              "open": "0200",
+              "close": "0130"
+            }
+          ],
+          "6": [
+            {
+              "open": "0200",
+              "close": "0130"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 2:00 AM – 1:30 AM",
+          "Tuesday: 2:00 AM – 1:30 AM",
+          "Wednesday: 2:00 AM – 1:30 AM",
+          "Thursday: 2:00 AM – 1:30 AM",
+          "Friday: 2:00 AM – 1:30 AM",
+          "Saturday: 2:00 AM – 1:30 AM",
+          "Sunday: 2:00 AM – 1:30 AM"
+        ]
+      }
+    },
+    {
+      "name": "𝐍𝐜𝐥𝐞𝐱 𝐀𝐜𝐚𝐝𝐞𝐦𝐲",
+      "address": "4830 Tidecrest Ave, Orlando, FL 32819, USA",
+      "distanceMi": 15.957,
+      "rating": 5,
+      "ratingCount": 1,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "1": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "2": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "3": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "4": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "5": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "6": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: Open 24 hours",
+          "Tuesday: Open 24 hours",
+          "Wednesday: Open 24 hours",
+          "Thursday: Open 24 hours",
+          "Friday: Open 24 hours",
+          "Saturday: Open 24 hours",
+          "Sunday: Open 24 hours"
+        ]
+      }
+    },
+    {
+      "name": "Lake Buena Vista Pharmacy",
+      "address": "13401 Blue Heron Beach Dr #101, Orlando, FL 32821, USA",
+      "distanceMi": 16.057,
+      "rating": 5,
+      "ratingCount": 11,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "0700",
+              "close": "2300"
+            }
+          ],
+          "1": [
+            {
+              "open": "0700",
+              "close": "2300"
+            }
+          ],
+          "2": [
+            {
+              "open": "0700",
+              "close": "2300"
+            }
+          ],
+          "3": [
+            {
+              "open": "0700",
+              "close": "2300"
+            }
+          ],
+          "4": [
+            {
+              "open": "0700",
+              "close": "2300"
+            }
+          ],
+          "5": [
+            {
+              "open": "0700",
+              "close": "2300"
+            }
+          ],
+          "6": [
+            {
+              "open": "0700",
+              "close": "2300"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 7:00 AM – 11:00 PM",
+          "Tuesday: 7:00 AM – 11:00 PM",
+          "Wednesday: 7:00 AM – 11:00 PM",
+          "Thursday: 7:00 AM – 11:00 PM",
+          "Friday: 7:00 AM – 11:00 PM",
+          "Saturday: 7:00 AM – 11:00 PM",
+          "Sunday: 7:00 AM – 11:00 PM"
+        ]
+      }
+    },
+    {
+      "name": "Caps",
+      "address": "2815 Directors Row, Orlando, FL 32809, USA",
+      "distanceMi": 16.888,
+      "rating": 5,
+      "ratingCount": 4,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "1": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "2": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "3": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "4": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "5": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "6": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: Open 24 hours",
+          "Tuesday: Open 24 hours",
+          "Wednesday: Open 24 hours",
+          "Thursday: Open 24 hours",
+          "Friday: Open 24 hours",
+          "Saturday: Open 24 hours",
+          "Sunday: Open 24 hours"
+        ]
+      }
+    },
+    {
+      "name": "CVS Pharmacy y más",
+      "address": "7300 Curry Ford Rd, Orlando, FL 32822, USA",
+      "distanceMi": 17.829,
+      "rating": 3.5,
+      "ratingCount": 137,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "1": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "2": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "3": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "4": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "5": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "6": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Tuesday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Wednesday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Thursday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Friday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Saturday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Sunday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM"
+        ]
+      }
+    },
+    {
+      "name": "Walgreens Pharmacy",
+      "address": "7650 W Sand Lake Rd, Orlando, FL 32819, USA",
+      "distanceMi": 18.709,
+      "rating": 3.4,
+      "ratingCount": 28,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "0800",
+              "close": "1330"
+            },
+            {
+              "open": "1400",
+              "close": "0000"
+            }
+          ],
+          "1": [
+            {
+              "open": "0800",
+              "close": "1330"
+            },
+            {
+              "open": "1400",
+              "close": "0000"
+            }
+          ],
+          "2": [
+            {
+              "open": "0800",
+              "close": "1330"
+            },
+            {
+              "open": "1400",
+              "close": "0000"
+            }
+          ],
+          "3": [
+            {
+              "open": "0800",
+              "close": "1330"
+            },
+            {
+              "open": "1400",
+              "close": "0000"
+            }
+          ],
+          "4": [
+            {
+              "open": "0800",
+              "close": "1330"
+            },
+            {
+              "open": "1400",
+              "close": "0000"
+            }
+          ],
+          "5": [
+            {
+              "open": "0800",
+              "close": "1330"
+            },
+            {
+              "open": "1400",
+              "close": "0000"
+            }
+          ],
+          "6": [
+            {
+              "open": "0800",
+              "close": "1330"
+            },
+            {
+              "open": "1400",
+              "close": "0000"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 8:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Tuesday: 8:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Wednesday: 8:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Thursday: 8:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Friday: 8:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Saturday: 8:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Sunday: 8:00 AM – 1:30 PM, 2:00 PM – 12:00 AM"
+        ]
+      }
+    },
+    {
+      "name": "CVS Pharmacy",
+      "address": "7599 W Sand Lake Rd, Orlando, FL 32819, USA",
+      "distanceMi": 18.755,
+      "rating": 4,
+      "ratingCount": 123,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "1": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "2": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "3": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "4": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "5": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ],
+          "6": [
+            {
+              "open": "1400",
+              "close": "1330"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Tuesday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Wednesday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Thursday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Friday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Saturday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM",
+          "Sunday: 12:00 AM – 1:30 PM, 2:00 PM – 12:00 AM"
+        ]
+      }
+    },
+    {
+      "name": "Pharma Anabolics Shop",
+      "address": "726 Grove Ave, Orlando, FL 32805, USA",
+      "distanceMi": 20.572,
+      "rating": null,
+      "ratingCount": null,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "1": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "2": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "3": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "4": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "5": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "6": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: Open 24 hours",
+          "Tuesday: Open 24 hours",
+          "Wednesday: Open 24 hours",
+          "Thursday: Open 24 hours",
+          "Friday: Open 24 hours",
+          "Saturday: Open 24 hours",
+          "Sunday: Open 24 hours"
+        ]
+      }
+    },
+    {
+      "name": "Peptide Therapist Store",
+      "address": "300 Lime Ave, Orlando, FL 32805, USA",
+      "distanceMi": 20.752,
+      "rating": null,
+      "ratingCount": null,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [],
+          "1": [
+            {
+              "open": "0000",
+              "close": "0000"
+            }
+          ],
+          "2": [],
+          "3": [],
+          "4": [],
+          "5": [],
+          "6": []
+        },
+        "weekdayText": [
+          "Monday: Open 24 hours",
+          "Tuesday: Open 24 hours",
+          "Wednesday: Open 24 hours",
+          "Thursday: Open 24 hours",
+          "Friday: Open 24 hours",
+          "Saturday: Open 24 hours",
+          "Sunday: Closed"
+        ]
+      }
+    }
+  ],
+  "pediatrician": [
+    {
+      "name": "Osceola Community Health Services (Primary Care / Pediatrics)",
+      "address": "1050 Grape Ave, St Cloud, FL 34769, USA",
+      "distanceMi": 0.647,
+      "rating": 4.4,
+      "ratingCount": 286,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [],
+          "1": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "2": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "3": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "4": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "5": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "6": []
+        },
+        "weekdayText": [
+          "Monday: 8:00 AM – 5:00 PM",
+          "Tuesday: 8:00 AM – 5:00 PM",
+          "Wednesday: 8:00 AM – 5:00 PM",
+          "Thursday: 8:00 AM – 5:00 PM",
+          "Friday: 8:00 AM – 5:00 PM",
+          "Saturday: Closed",
+          "Sunday: Closed"
+        ]
+      }
+    },
+    {
+      "name": "All Around Pediatrics",
+      "address": "1521 E Irlo Bronson Memorial Hwy, St Cloud, FL 34771, USA",
+      "distanceMi": 1.325,
+      "rating": 4.7,
+      "ratingCount": 73,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [],
+          "1": [
+            {
+              "open": "0900",
+              "close": "1700"
+            }
+          ],
+          "2": [
+            {
+              "open": "0900",
+              "close": "1700"
+            }
+          ],
+          "3": [
+            {
+              "open": "1000",
+              "close": "1800"
+            }
+          ],
+          "4": [
+            {
+              "open": "0900",
+              "close": "1430"
+            }
+          ],
+          "5": [
+            {
+              "open": "0900",
+              "close": "1700"
+            }
+          ],
+          "6": []
+        },
+        "weekdayText": [
+          "Monday: 9:00 AM – 5:00 PM",
+          "Tuesday: 9:00 AM – 5:00 PM",
+          "Wednesday: 10:00 AM – 6:00 PM",
+          "Thursday: 9:00 AM – 2:30 PM",
+          "Friday: 9:00 AM – 5:00 PM",
+          "Saturday: Closed",
+          "Sunday: Closed"
+        ]
+      }
+    },
+    {
+      "name": "Pediatrics of Central Florida, PA",
+      "address": "3010 17th St, St Cloud, FL 34769, USA",
+      "distanceMi": 2.349,
+      "rating": 4.6,
+      "ratingCount": 224,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [],
+          "1": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "2": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "3": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "4": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "5": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "6": []
+        },
+        "weekdayText": [
+          "Monday: 8:00 AM – 5:00 PM",
+          "Tuesday: 8:00 AM – 5:00 PM",
+          "Wednesday: 8:00 AM – 5:00 PM",
+          "Thursday: 8:00 AM – 5:00 PM",
+          "Friday: 8:00 AM – 5:00 PM",
+          "Saturday: Closed",
+          "Sunday: Closed"
+        ]
+      }
+    },
+    {
+      "name": "Pediatric Universe",
+      "address": "3103 Innovation Dr, St Cloud, FL 34769, USA",
+      "distanceMi": 2.917,
+      "rating": 4.6,
+      "ratingCount": 59,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [],
+          "1": [
+            {
+              "open": "0830",
+              "close": "1700"
+            }
+          ],
+          "2": [
+            {
+              "open": "0830",
+              "close": "1700"
+            }
+          ],
+          "3": [
+            {
+              "open": "0830",
+              "close": "1700"
+            }
+          ],
+          "4": [
+            {
+              "open": "0830",
+              "close": "1700"
+            }
+          ],
+          "5": [
+            {
+              "open": "0830",
+              "close": "1700"
+            }
+          ],
+          "6": []
+        },
+        "weekdayText": [
+          "Monday: 8:30 AM – 5:00 PM",
+          "Tuesday: 8:30 AM – 5:00 PM",
+          "Wednesday: 8:30 AM – 5:00 PM",
+          "Thursday: 8:30 AM – 5:00 PM",
+          "Friday: 8:30 AM – 5:00 PM",
+          "Saturday: Closed",
+          "Sunday: Closed"
+        ]
+      }
+    },
+    {
+      "name": "BVL Pediatrics",
+      "address": "2901 E Irlo Bronson Memorial Hwy B, Kissimmee, FL 34744, USA",
+      "distanceMi": 3.368,
+      "rating": 4.7,
+      "ratingCount": 138,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [],
+          "1": [
+            {
+              "open": "0900",
+              "close": "1700"
+            }
+          ],
+          "2": [
+            {
+              "open": "0900",
+              "close": "1700"
+            }
+          ],
+          "3": [
+            {
+              "open": "0900",
+              "close": "1700"
+            }
+          ],
+          "4": [
+            {
+              "open": "0900",
+              "close": "1700"
+            }
+          ],
+          "5": [
+            {
+              "open": "0900",
+              "close": "1300"
+            }
+          ],
+          "6": [
+            {
+              "open": "0900",
+              "close": "1200"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 9:00 AM – 5:00 PM",
+          "Tuesday: 9:00 AM – 5:00 PM",
+          "Wednesday: 9:00 AM – 5:00 PM",
+          "Thursday: 9:00 AM – 5:00 PM",
+          "Friday: 9:00 AM – 1:00 PM",
+          "Saturday: 9:00 AM – 12:00 PM",
+          "Sunday: Closed"
+        ]
+      }
+    },
+    {
+      "name": "PM Pediatric Urgent Care (Formerly Night Lite Pediatrics)",
+      "address": "2322 E Irlo Bronson Memorial Hwy, Kissimmee, FL 34744, USA",
+      "distanceMi": 4.961,
+      "rating": 4.7,
+      "ratingCount": 1268,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "0900",
+              "close": "2100"
+            }
+          ],
+          "1": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "2": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "3": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "4": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "5": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "6": [
+            {
+              "open": "0900",
+              "close": "2100"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 10:00 AM – 10:00 PM",
+          "Tuesday: 10:00 AM – 10:00 PM",
+          "Wednesday: 10:00 AM – 10:00 PM",
+          "Thursday: 10:00 AM – 10:00 PM",
+          "Friday: 10:00 AM – 10:00 PM",
+          "Saturday: 9:00 AM – 9:00 PM",
+          "Sunday: 9:00 AM – 9:00 PM"
+        ]
+      }
+    },
+    {
+      "name": "Pediatrics and Family Care",
+      "address": "1000 W Emmett St, Kissimmee, FL 34741, USA",
+      "distanceMi": 9.058,
+      "rating": 4.9,
+      "ratingCount": 1257,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [],
+          "1": [
+            {
+              "open": "0830",
+              "close": "1830"
+            }
+          ],
+          "2": [
+            {
+              "open": "0830",
+              "close": "1830"
+            }
+          ],
+          "3": [
+            {
+              "open": "0830",
+              "close": "1700"
+            }
+          ],
+          "4": [
+            {
+              "open": "0830",
+              "close": "1700"
+            }
+          ],
+          "5": [
+            {
+              "open": "0830",
+              "close": "1700"
+            }
+          ],
+          "6": []
+        },
+        "weekdayText": [
+          "Monday: 8:30 AM – 6:30 PM",
+          "Tuesday: 8:30 AM – 6:30 PM",
+          "Wednesday: 8:30 AM – 5:00 PM",
+          "Thursday: 8:30 AM – 5:00 PM",
+          "Friday: 8:30 AM – 5:00 PM",
+          "Saturday: Closed",
+          "Sunday: Closed"
+        ]
+      }
+    },
+    {
+      "name": "Nemours Children's Health, Osceola - Urgent Care",
+      "address": "750 Centerview Blvd, Kissimmee, FL 34741, USA",
+      "distanceMi": 10.189,
+      "rating": 4.1,
+      "ratingCount": 585,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "1000",
+              "close": "2000"
+            }
+          ],
+          "1": [
+            {
+              "open": "1000",
+              "close": "2000"
+            }
+          ],
+          "2": [
+            {
+              "open": "1000",
+              "close": "2000"
+            }
+          ],
+          "3": [
+            {
+              "open": "1000",
+              "close": "2000"
+            }
+          ],
+          "4": [
+            {
+              "open": "1000",
+              "close": "2000"
+            }
+          ],
+          "5": [
+            {
+              "open": "1000",
+              "close": "2000"
+            }
+          ],
+          "6": [
+            {
+              "open": "1000",
+              "close": "2000"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 10:00 AM – 8:00 PM",
+          "Tuesday: 10:00 AM – 8:00 PM",
+          "Wednesday: 10:00 AM – 8:00 PM",
+          "Thursday: 10:00 AM – 8:00 PM",
+          "Friday: 10:00 AM – 8:00 PM",
+          "Saturday: 10:00 AM – 8:00 PM",
+          "Sunday: 10:00 AM – 8:00 PM"
+        ]
+      }
+    },
+    {
+      "name": "PM Pediatric Urgent Care (Formerly Night Lite Pediatrics)",
+      "address": "1267 Osceola Pkwy, Kissimmee, FL 34741, USA",
+      "distanceMi": 10.746,
+      "rating": 4.4,
+      "ratingCount": 1319,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "0800",
+              "close": "2200"
+            }
+          ],
+          "1": [
+            {
+              "open": "0800",
+              "close": "2200"
+            }
+          ],
+          "2": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "3": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "4": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "5": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "6": [
+            {
+              "open": "0800",
+              "close": "2200"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 8:00 AM – 10:00 PM",
+          "Tuesday: 10:00 AM – 10:00 PM",
+          "Wednesday: 10:00 AM – 10:00 PM",
+          "Thursday: 10:00 AM – 10:00 PM",
+          "Friday: 10:00 AM – 10:00 PM",
+          "Saturday: 8:00 AM – 10:00 PM",
+          "Sunday: 8:00 AM – 10:00 PM"
+        ]
+      }
+    },
+    {
+      "name": "Pediatric Associates - Loop",
+      "address": "3274 Greenwald Way N, Kissimmee, FL 34741, USA",
+      "distanceMi": 10.873,
+      "rating": 4.2,
+      "ratingCount": 467,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [],
+          "1": [
+            {
+              "open": "0800",
+              "close": "1215"
+            },
+            {
+              "open": "1315",
+              "close": "2230"
+            }
+          ],
+          "2": [
+            {
+              "open": "0800",
+              "close": "1215"
+            },
+            {
+              "open": "1315",
+              "close": "2230"
+            }
+          ],
+          "3": [
+            {
+              "open": "0800",
+              "close": "1215"
+            },
+            {
+              "open": "1315",
+              "close": "2230"
+            }
+          ],
+          "4": [
+            {
+              "open": "0800",
+              "close": "1215"
+            },
+            {
+              "open": "1315",
+              "close": "2230"
+            }
+          ],
+          "5": [
+            {
+              "open": "0800",
+              "close": "1215"
+            },
+            {
+              "open": "1315",
+              "close": "2230"
+            }
+          ],
+          "6": [
+            {
+              "open": "0800",
+              "close": "1200"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 8:00 AM – 12:15 PM, 1:15 – 10:30 PM",
+          "Tuesday: 8:00 AM – 12:15 PM, 1:15 – 10:30 PM",
+          "Wednesday: 8:00 AM – 12:15 PM, 1:15 – 10:30 PM",
+          "Thursday: 8:00 AM – 12:15 PM, 1:15 – 10:30 PM",
+          "Friday: 8:00 AM – 12:15 PM, 1:15 – 10:30 PM",
+          "Saturday: 8:00 AM – 12:00 PM",
+          "Sunday: Closed"
+        ]
+      }
+    },
+    {
+      "name": "Nemours Children's Health, Narcoossee Road - Urgent Care",
+      "address": "9368 N Narcoossee Rd Ste 105, Orlando, FL 32827, USA",
+      "distanceMi": 11.995,
+      "rating": 3.6,
+      "ratingCount": 180,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "1200",
+              "close": "2000"
+            }
+          ],
+          "1": [
+            {
+              "open": "1600",
+              "close": "2000"
+            }
+          ],
+          "2": [
+            {
+              "open": "1600",
+              "close": "2000"
+            }
+          ],
+          "3": [
+            {
+              "open": "1600",
+              "close": "2000"
+            }
+          ],
+          "4": [
+            {
+              "open": "1600",
+              "close": "2000"
+            }
+          ],
+          "5": [
+            {
+              "open": "1600",
+              "close": "2000"
+            }
+          ],
+          "6": [
+            {
+              "open": "1200",
+              "close": "2000"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 4:00 – 8:00 PM",
+          "Tuesday: 4:00 – 8:00 PM",
+          "Wednesday: 4:00 – 8:00 PM",
+          "Thursday: 4:00 – 8:00 PM",
+          "Friday: 4:00 – 8:00 PM",
+          "Saturday: 12:00 – 8:00 PM",
+          "Sunday: 12:00 – 8:00 PM"
+        ]
+      }
+    },
+    {
+      "name": "Celebration Pediatrics at Celebration",
+      "address": "1530 Celebration Blvd Ste 301, Kissimmee, FL 34747, USA",
+      "distanceMi": 18.236,
+      "rating": 4.6,
+      "ratingCount": 1780,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [],
+          "1": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "2": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "3": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "4": [
+            {
+              "open": "0800",
+              "close": "1700"
+            }
+          ],
+          "5": [
+            {
+              "open": "0800",
+              "close": "1530"
+            }
+          ],
+          "6": []
+        },
+        "weekdayText": [
+          "Monday: 8:00 AM – 5:00 PM",
+          "Tuesday: 8:00 AM – 5:00 PM",
+          "Wednesday: 8:00 AM – 5:00 PM",
+          "Thursday: 8:00 AM – 5:00 PM",
+          "Friday: 8:00 AM – 3:30 PM",
+          "Saturday: Closed",
+          "Sunday: Closed"
+        ]
+      }
+    },
+    {
+      "name": "Pediatrics and Family Care",
+      "address": "5150 Curry Ford Rd, Orlando, FL 32812, USA",
+      "distanceMi": 18.704,
+      "rating": 4.9,
+      "ratingCount": 1027,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [],
+          "1": [
+            {
+              "open": "0830",
+              "close": "1830"
+            }
+          ],
+          "2": [
+            {
+              "open": "0830",
+              "close": "1830"
+            }
+          ],
+          "3": [
+            {
+              "open": "0830",
+              "close": "1700"
+            }
+          ],
+          "4": [
+            {
+              "open": "0830",
+              "close": "1700"
+            }
+          ],
+          "5": [
+            {
+              "open": "0830",
+              "close": "1700"
+            }
+          ],
+          "6": []
+        },
+        "weekdayText": [
+          "Monday: 8:30 AM – 6:30 PM",
+          "Tuesday: 8:30 AM – 6:30 PM",
+          "Wednesday: 8:30 AM – 5:00 PM",
+          "Thursday: 8:30 AM – 5:00 PM",
+          "Friday: 8:30 AM – 5:00 PM",
+          "Saturday: Closed",
+          "Sunday: Closed"
+        ]
+      }
+    },
+    {
+      "name": "Orlando Health Children’s Arnold Palmer Hospital Emergency Room",
+      "address": "92 W Miller St, Orlando, FL 32806, USA",
+      "distanceMi": 19.575,
+      "rating": 4.5,
+      "ratingCount": 3349,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "1": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "2": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "3": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "4": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "5": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ],
+          "6": [
+            {
+              "open": "0000",
+              "close": "2400"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: Open 24 hours",
+          "Tuesday: Open 24 hours",
+          "Wednesday: Open 24 hours",
+          "Thursday: Open 24 hours",
+          "Friday: Open 24 hours",
+          "Saturday: Open 24 hours",
+          "Sunday: Open 24 hours"
+        ]
+      }
+    },
+    {
+      "name": "PM Pediatric Urgent Care (Formerly Night Lite Pediatrics)",
+      "address": "11325 Lake Underhill Rd, Orlando, FL 32825, USA",
+      "distanceMi": 20.214,
+      "rating": 4.6,
+      "ratingCount": 1156,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "1": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "2": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "3": [
+            {
+              "open": "1400",
+              "close": "2200"
+            }
+          ],
+          "4": [
+            {
+              "open": "1400",
+              "close": "2200"
+            }
+          ],
+          "5": [
+            {
+              "open": "1400",
+              "close": "2200"
+            }
+          ],
+          "6": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 10:00 AM – 10:00 PM",
+          "Tuesday: 10:00 AM – 10:00 PM",
+          "Wednesday: 2:00 – 10:00 PM",
+          "Thursday: 2:00 – 10:00 PM",
+          "Friday: 2:00 – 10:00 PM",
+          "Saturday: 10:00 AM – 10:00 PM",
+          "Sunday: 10:00 AM – 10:00 PM"
+        ]
+      }
+    },
+    {
+      "name": "AdventHealth Centra Care Kids Winter Park",
+      "address": "2325 W Fairbanks Ave, Winter Park, FL 32789, USA",
+      "distanceMi": 24.18,
+      "rating": 4.7,
+      "ratingCount": 911,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "1": [
+            {
+              "open": "1400",
+              "close": "2200"
+            }
+          ],
+          "2": [
+            {
+              "open": "1400",
+              "close": "2200"
+            }
+          ],
+          "3": [
+            {
+              "open": "1400",
+              "close": "2200"
+            }
+          ],
+          "4": [
+            {
+              "open": "1400",
+              "close": "2200"
+            }
+          ],
+          "5": [
+            {
+              "open": "1400",
+              "close": "2200"
+            }
+          ],
+          "6": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 2:00 – 10:00 PM",
+          "Tuesday: 2:00 – 10:00 PM",
+          "Wednesday: 2:00 – 10:00 PM",
+          "Thursday: 2:00 – 10:00 PM",
+          "Friday: 2:00 – 10:00 PM",
+          "Saturday: 10:00 AM – 10:00 PM",
+          "Sunday: 10:00 AM – 10:00 PM"
+        ]
+      }
+    },
+    {
+      "name": "PM Pediatric Urgent Care (Formerly Night Lite Pediatrics)",
+      "address": "13750 W Colonial Dr Ste 250, Winter Garden, FL 34787, USA",
+      "distanceMi": 27.946,
+      "rating": 4.4,
+      "ratingCount": 1077,
+      "businessStatus": "OPERATIONAL",
+      "hours": {
+        "periods": {
+          "0": [
+            {
+              "open": "0800",
+              "close": "2200"
+            }
+          ],
+          "1": [
+            {
+              "open": "0800",
+              "close": "2200"
+            }
+          ],
+          "2": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "3": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "4": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "5": [
+            {
+              "open": "1000",
+              "close": "2200"
+            }
+          ],
+          "6": [
+            {
+              "open": "0800",
+              "close": "2200"
+            }
+          ]
+        },
+        "weekdayText": [
+          "Monday: 8:00 AM – 10:00 PM",
+          "Tuesday: 10:00 AM – 10:00 PM",
+          "Wednesday: 10:00 AM – 10:00 PM",
+          "Thursday: 10:00 AM – 10:00 PM",
+          "Friday: 10:00 AM – 10:00 PM",
+          "Saturday: 8:00 AM – 10:00 PM",
+          "Sunday: 8:00 AM – 10:00 PM"
+        ]
+      }
+    }
+  ]
+}
