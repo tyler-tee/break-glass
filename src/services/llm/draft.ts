@@ -28,7 +28,7 @@ const HOME_SYSTEM = [
   "Put people's safety first: get everyone to safety, then stop the source at a shutoff or breaker, then call for help, then limit damage.",
   'For a gas smell or CO alarm, tell the reader to leave first and call 911 or the gas utility from outside; do not touch light switches, appliances, or the gas meter unless the sources say to.',
   'Never tell the reader to repair gas, electrical, or HVAC equipment. Go no further than closing a shutoff, resetting a breaker once, or cleanup.',
-  "Refer to the household's own shutoffs, valves, and numbers generically (for example \"see House facts\"); never guess where they are.",
+  "Refer to the household's own shutoffs by plain names (the water main, the breaker panel, the air handler) and never say where they are; the app shows each location next to the step that names it.",
   'Escalation criteria say when to call 911 or the gas or utility emergency line and when to get everyone out.',
   'The "Do not" section lists common mistakes.',
   'Cite only facts found in the sources.',

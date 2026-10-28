@@ -11,10 +11,11 @@ import { type CategoryGroup, getVisibleLocation, listVisibleByCategory, listVisi
 import { getPublished, getPublishedBySlug } from '../protocols/repo.js';
 import { renderMarkdown, safeHref, telHref } from '../../web/format.js';
 import { householdName, page } from '../../web/Layout.js';
+import { hasHomeContent } from '../house/familyQueries.js';
 import { splitSopSections } from '../../web/protocolSections.js';
 import { BackLink, categoryIcon, daysAgo, oldestVerified, ProviderCard, SearchField, Svg } from '../../web/family/ui.js';
 
-const POISON_CONTROL = { display: '1-800-222-1222', tel: 'tel:18002221222' };
+export const POISON_CONTROL = { display: '1-800-222-1222', tel: 'tel:18002221222' };
 // Home shows this many category tiles, then the dashed "All categories" tile (always present, per the mockup).
 const MAX_TILES = 5;
 
@@ -74,6 +75,19 @@ export function familyRoutes(deps: AppDeps): Hono {
           </span>
           <Svg name="chevron-right" size={22} />
         </a>
+
+        {hasHomeContent(db) ? (
+          <a class="protocols-banner house-banner" href="/house">
+            <span class="badge">
+              <Svg name="house" size={26} sw={2} />
+            </span>
+            <span class="text">
+              <span class="title">House emergencies</span>
+              <span class="sub">Leaks, power, AC · shutoffs and who to call</span>
+            </span>
+            <Svg name="chevron-right" size={22} />
+          </a>
+        ) : null}
 
         <div class="pair">
           <a class="btn btn-accent-outline" href={telHref(number)}>

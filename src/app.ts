@@ -9,6 +9,7 @@ import type { LookupFn } from './services/llm/web.js';
 import type { Env } from './env.js';
 import { familyRoutes } from './features/family/routes.js';
 import { UPLOAD_PATH, housePublicRoutes } from './features/house/routes.js';
+import { houseFamilyRoutes } from './features/house/familyRoutes.js';
 import { apiRoutes } from './features/api/routes.js';
 import type { SchedulerHandle } from './jobs/scheduler.js';
 import { adminRoutes } from './features/admin/routes.js';
@@ -108,6 +109,7 @@ export function createApp(input: AppDeps): Hono {
   registerAssets(app);
   app.route('/setup', setupClaimRoutes(deps)); // public; POST is same-origin checked inside
   app.route('/house', housePublicRoutes(deps)); // photos are unauthenticated, like the family side
+  app.route('/house', houseFamilyRoutes(deps)); // the family's Home pages
   app.route('/', familyRoutes(deps));
   app.route('/api', apiRoutes(deps));
   app.route('/admin', adminRoutes(deps));

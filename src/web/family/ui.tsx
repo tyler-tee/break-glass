@@ -1,5 +1,6 @@
 import type { Child, FC } from 'hono/jsx';
 import { isReportedTemporarilyClosed } from '../../features/locations/familyViews.js';
+import type { HouseFact } from '../../features/house/repo.js';
 import type { LocationView } from '../../features/locations/search.js';
 import { summarizeChanges } from '../changeSummary.js';
 import { formatMiles, mapsHref, telHref } from '../format.js';
@@ -27,12 +28,23 @@ const PATHS = {
     'M19 6.3a9 9 0 0 1 1.8 3.9 2 2 0 0 1 0 3.6 9 9 0 0 1-17.6 0 2 2 0 0 1 0-3.6A9 9 0 0 1 12 3c2 0 3.5 1.1 3.5 2.5s-.9 2.5-2 2.5c-.8 0-1.5-.4-1.5-1',
   ],
   pin: ['M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z'],
+  // Home icons, from the approved Home mockup.
+  house: ['M3 10.5L12 3l9 7.5', 'M5 9.5V21h14V9.5', 'M10 21v-6h4v6'],
+  drop: ['M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z'],
+  bolt: ['M13 2L4 14h7l-1 8 9-12h-7l1-8z'],
+  fan: ['M12 12c0-4 1-8 4-8s3 4 0 6', 'M12 12c4 0 8 1 8 4s-4 3-6 0', 'M12 12c0 4-1 8-4 8s-3-4 0-6', 'M12 12c-4 0-8-1-8-4s4-3 6 0'],
+  flame: ['M12 22a7 7 0 0 0 7-7c0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-4-2 2-5 5-5 8a7 7 0 0 0 7 7z'],
+  toilet: ['M6 3h5v7H6z', 'M4 10h16a8 8 0 0 1-8 8h-1l1 3H8l1-3.5A8 8 0 0 1 4 10z'],
+  camera: ['M4 7h3l2-3h6l2 3h3v13H4z'],
+  print: ['M7 9V3h10v6', 'M3 9h18v8H3z', 'M7 14h10v7H7z'],
 } as const;
 const CIRCLES: Partial<Record<IconName, [number, number, number][]>> = {
   search: [[11, 11, 7]],
   clock: [[12, 12, 9]],
   paw: [[5.5, 10, 1.6], [9, 5.5, 1.6], [15, 5.5, 1.6], [18.5, 10, 1.6]],
   pin: [[12, 10, 3]],
+  fan: [[12, 12, 1.2]],
+  camera: [[12, 13, 4]],
 };
 
 export type IconName = keyof typeof PATHS;
@@ -161,6 +173,125 @@ export const ProviderCard: FC<{ view: LocationView; headingLevel?: 2 | 3 }> = ({
           <p>{l.insuranceNotes.trim()}</p>
         </details>
       ) : null}
+      <div class={`actions${l.phone ? '' : ' single'}`}>
+        {l.phone ? (
+          <a class="btn sm btn-solid" href={telHref(l.phone)} aria-label={`Call ${l.name}, ${l.phone}`}>
+            <Svg name="phone" /> Call
+          </a>
+        ) : null}
+        <a class="btn sm btn-outline" href={mapsHref(l)} aria-label={`Directions to ${l.name}`}>
+          <Svg name="directions" sw={2} /> Directions
+        </a>
+      </div>
+    </article>
+  );
+};
+
+// ---- Home (house emergencies) ----
+
+const SYSTEM_ICONS: Record<string, IconName> = { water: 'drop', electric: 'bolt', hvac: 'fan', gas: 'flame', general: 'house' };
+export const systemIcon = (system: string): IconName => SYSTEM_ICONS[system] ?? 'house';
+
+export type PhotoRef = { id: number; caption: string | null };
+export const photoSrc = (p: PhotoRef) => `/house/photos/${p.id}`;
+
+/** A shutoff on the Home page: system tile, name, where it is, how to use it, and a small photo that opens full size. */
+export const FactCard: FC<{ fact: HouseFact; photo?: PhotoRef | undefined }> = ({ fact, photo }) => (
+  <article class="fact">
+    <div class="top">
+      <span class="sys">
+        <Svg name={systemIcon(fact.system)} size={22} />
+      </span>
+      <div class="body">
+        <h3>{fact.title}</h3>
+        {fact.whereNote ? <p class="where">{fact.whereNote}</p> : null}
+        {fact.instructions ? <p class="extra">{fact.instructions}</p> : null}
+      </div>
+      {photo ? (
+        <a class="photo thumb" href={photoSrc(photo)} aria-label={`Photo of ${fact.title}`}>
+          <img src={photoSrc(photo)} alt={photo.caption ?? `${fact.title}`} width="72" height="72" loading="lazy" />
+        </a>
+      ) : null}
+    </div>
+  </article>
+);
+
+/** A fact inside the step that names it. A note shows its text where a shutoff shows its location. */
+export const InlineFact: FC<{ fact: HouseFact; photo?: PhotoRef | undefined }> = ({ fact, photo }) => (
+  <div class="inline-fact">
+    <span class="label">{fact.title}</span>
+    {fact.kind === 'note' ? (
+      <span class="where">{fact.instructions ?? fact.whereNote}</span>
+    ) : (
+      <>
+        {fact.whereNote ? <span class="where">{fact.whereNote}</span> : null}
+        {fact.instructions ? <span class="subtle">{fact.instructions}</span> : null}
+      </>
+    )}
+    {photo ? (
+      <a class="photo" href={photoSrc(photo)}>
+        <img src={photoSrc(photo)} alt={photo.caption ?? `Photo of ${fact.title}`} loading="lazy" />
+      </a>
+    ) : null}
+  </div>
+);
+
+/** A number to call: name, the number as text, a Call button, and the household's note about it. */
+export const CallRow: FC<{ name: string; phone: string; ours?: boolean; note?: string | null }> = ({ name, phone, ours, note }) => (
+  <div class="provider">
+    <div class="callrow">
+      <div class="text">
+        <span class="name">
+          {name}
+          {ours ? <> <span class="pill ours">Ours</span></> : null}
+        </span>
+        <span class="num">{phone}</span>
+      </div>
+      <a class="btn btn-solid" href={telHref(phone)} aria-label={`Call ${name}, ${phone}`}>
+        <Svg name="phone" /> Call
+      </a>
+    </div>
+    {note ? <p class="note">{note}</p> : null}
+  </div>
+);
+
+/** "Town" from a Google-style address ("12 Main St, Springfield, UT 84000, USA"): the part before the state. */
+export function townOf(l: { address: string | null; shortAddress: string | null }): string | null {
+  for (const addr of [l.address, l.shortAddress]) {
+    const parts = (addr ?? '').split(',').map((p) => p.trim());
+    const state = parts.findIndex((p, i) => i > 0 && /^[A-Z]{2}(\s+\d{5}(-\d{4})?)?$/.test(p));
+    if (state > 0) return parts[state - 1] || null;
+  }
+  return null;
+}
+
+/** An AI-picked company for a home guide: the ProviderCard look without hours, plus the ranking reason. */
+export const PickCard: FC<{ view: LocationView }> = ({ view: l }) => {
+  const meta = [
+    townOf(l),
+    formatMiles(l.distanceMi),
+    l.rating !== null ? `${l.rating.toFixed(1)} ★` : null,
+    l.ratingCount ? `${l.ratingCount.toLocaleString('en-US')} reviews` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const reason = l.rankReason?.trim() ?? '';
+  return (
+    <article class="provider" id={`place-${l.id}`}>
+      {l.status === 'warn' ? (
+        <div class="alert" role="note">
+          <Svg name="warning" />
+          <span class="text">
+            <strong>Needs re-approval</strong>
+            <span>{summarizeChanges(l.openChanges)}</span>
+          </span>
+        </div>
+      ) : null}
+      <div>
+        <h3>{l.name}</h3>
+        {meta ? <p class="meta">{meta}</p> : null}
+      </div>
+      {reason ? <p class="note">{reason}</p> : null}
       <div class={`actions${l.phone ? '' : ' single'}`}>
         {l.phone ? (
           <a class="btn sm btn-solid" href={telHref(l.phone)} aria-label={`Call ${l.name}, ${l.phone}`}>
