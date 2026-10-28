@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
+import { eq } from 'drizzle-orm';
 import type { AppDeps } from '../../app.js';
 import type { Db, DbOrTx } from '../../db/client.js';
+import { settings } from '../../db/schema.js';
 import type { Logger, ProtocolStatus } from '../../domain/types.js';
 import { SOP_HEADINGS, assertSopHeadings, draftProtocol } from '../../services/llm/draft.js';
 import { LlmRefusalError, LlmValidationError, type LlmProvider } from '../../services/llm/provider.js';
@@ -177,13 +179,44 @@ export async function runDraft(
   }
 }
 
-export const MANUAL_TEMPLATE =
-  [
-    `${SOP_HEADINGS[0]}\nWhat this covers and who it is for.`,
-    `${SOP_HEADINGS[1]}\n1. First step.`,
-    `${SOP_HEADINGS[2]}\nCall 911 or go to the ER if ...`,
-    `${SOP_HEADINGS[3]}\n- Common mistake to avoid.`,
-  ].join('\n\n') + '\n';
+// The example lines a hand-written draft starts with. A version that still contains any of them is not ready:
+// it cannot be submitted for review or published (see assertNoTemplatePlaceholders).
+const SCOPE_PLACEHOLDER = 'What this covers and who it is for.';
+const STEP_PLACEHOLDER = '1. First step.';
+const DO_NOT_PLACEHOLDER = '- Common mistake to avoid.';
+/** The escalation example, built from the household emergency number. The trailing "if ..." is the marker. */
+const escalationPlaceholder = (emergencyNumber: string): string => `Call ${emergencyNumber} or go to the ER if ...`;
+const ESCALATION_PLACEHOLDER = /^Call .+ or go to the ER if \.\.\.$/;
+const PLACEHOLDER_LINES: readonly string[] = [SCOPE_PLACEHOLDER, STEP_PLACEHOLDER, DO_NOT_PLACEHOLDER];
+
+export const PLACEHOLDER_MESSAGE = 'Replace the example text in every section before publishing.';
+
+/** The hand-written starting point: the four required headings, each with an example line to replace. */
+export function manualTemplate(emergencyNumber: string): string {
+  return (
+    [
+      `${SOP_HEADINGS[0]}\n${SCOPE_PLACEHOLDER}`,
+      `${SOP_HEADINGS[1]}\n${STEP_PLACEHOLDER}`,
+      `${SOP_HEADINGS[2]}\n${escalationPlaceholder(emergencyNumber)}`,
+      `${SOP_HEADINGS[3]}\n${DO_NOT_PLACEHOLDER}`,
+    ].join('\n\n') + '\n'
+  );
+}
+
+/** The template with the US default number. */
+export const MANUAL_TEMPLATE = manualTemplate('911');
+
+/** True when any line of the body is still one of the template example lines. */
+export function hasTemplatePlaceholders(bodyMd: string): boolean {
+  return bodyMd.split(/\r?\n/).some((raw) => {
+    const line = raw.trim();
+    return PLACEHOLDER_LINES.includes(line) || ESCALATION_PLACEHOLDER.test(line);
+  });
+}
+
+function assertNoTemplatePlaceholders(bodyMd: string): void {
+  if (hasTemplatePlaceholders(bodyMd)) throw new ProtocolError('invalid', PLACEHOLDER_MESSAGE);
+}
 
 /**
  * Starts a hand-written draft prefilled with the four required SOP headings, so a household with no LLM key
@@ -195,12 +228,14 @@ export function createManualDraft(db: Db, protocolId: number, now: Date): Protoc
   return db.transaction((tx) => {
     const open = listVersions(tx, protocolId).find((v) => v.status === 'draft' || v.status === 'in_review');
     if (open) return open;
-    assertSopHeadings(MANUAL_TEMPLATE);
+    const number = tx.select({ n: settings.emergencyNumber }).from(settings).where(eq(settings.id, 1)).get()?.n || '911';
+    const bodyMd = manualTemplate(number);
+    assertSopHeadings(bodyMd);
     return insertVersion(tx, {
       protocolId,
       version: nextVersionNumber(tx, protocolId),
       status: 'draft',
-      bodyMd: MANUAL_TEMPLATE,
+      bodyMd,
       createdAt: now,
     });
   });
@@ -227,40 +262,67 @@ function requireTransition(v: ProtocolVersion, to: ProtocolStatus): void {
   }
 }
 
-export function updateDraftBody(db: Db, versionId: number, bodyMd: string, _now: Date): ProtocolVersion {
-  const v = loadVersion(db, versionId);
-  if (v.status !== 'draft' && v.status !== 'in_review') {
-    throw new ProtocolError('invalid_transition', `Cannot edit a ${v.status} version`);
-  }
+/** assertSopHeadings, reported as a ProtocolError with the short reason. */
+function checkHeadings(bodyMd: string): void {
   try {
     assertSopHeadings(bodyMd);
   } catch (e) {
     if (e instanceof LlmValidationError) throw new ProtocolError('invalid', e.message.split(': ')[0] ?? e.message);
     throw e;
   }
+}
+
+function requireOpen(v: ProtocolVersion): void {
+  if (v.status !== 'draft' && v.status !== 'in_review') {
+    throw new ProtocolError('invalid_transition', `Cannot edit a ${v.status} version`);
+  }
+}
+
+export function updateDraftBody(db: Db, versionId: number, bodyMd: string, _now: Date): ProtocolVersion {
+  requireOpen(loadVersion(db, versionId));
+  checkHeadings(bodyMd);
   return updateVersion(db, versionId, { bodyMd }) as ProtocolVersion;
 }
 
 export function submitForReview(db: Db, versionId: number, now: Date): ProtocolVersion {
   const v = loadVersion(db, versionId);
   if (v.status !== 'draft') throw new ProtocolError('invalid_transition', `Cannot submit a ${v.status} version`);
+  assertNoTemplatePlaceholders(v.bodyMd);
   return updateVersion(db, versionId, { status: 'in_review', submittedAt: now }) as ProtocolVersion;
 }
 
+/** Publishes inside the caller transaction: supersedes the current published version and clears re-review. */
+function publishIn(tx: DbOrTx, versionId: number, now: Date, notes?: string): ProtocolVersion {
+  const v = loadVersion(tx, versionId);
+  requireTransition(v, 'published');
+  assertNoTemplatePlaceholders(v.bodyMd);
+  for (const other of listVersions(tx, v.protocolId)) {
+    if (other.status === 'published') updateVersion(tx, other.id, { status: 'superseded' });
+  }
+  const out = updateVersion(tx, versionId, {
+    status: 'published',
+    reviewedAt: now,
+    reviewNotes: notes ?? null,
+  }) as ProtocolVersion;
+  updateProtocolReview(tx, v.protocolId, { needsRereview: false, rereviewReason: null });
+  return out;
+}
+
 export function publishVersion(db: Db, versionId: number, now: Date, notes?: string): ProtocolVersion {
+  return db.transaction((tx) => publishIn(tx, versionId, now, notes));
+}
+
+/**
+ * Saves an edited body and publishes it in one transaction, so text typed into the review form is never
+ * discarded by publishing. Runs the same checks as Save and Publish; on any failure nothing is saved.
+ */
+export function saveAndPublish(db: Db, versionId: number, bodyMd: string, now: Date, notes?: string): ProtocolVersion {
   return db.transaction((tx) => {
-    const v = loadVersion(tx, versionId);
-    requireTransition(v, 'published');
-    for (const other of listVersions(tx, v.protocolId)) {
-      if (other.status === 'published') updateVersion(tx, other.id, { status: 'superseded' });
-    }
-    const out = updateVersion(tx, versionId, {
-      status: 'published',
-      reviewedAt: now,
-      reviewNotes: notes ?? null,
-    }) as ProtocolVersion;
-    updateProtocolReview(tx, v.protocolId, { needsRereview: false, rereviewReason: null });
-    return out;
+    requireOpen(loadVersion(tx, versionId));
+    checkHeadings(bodyMd);
+    assertNoTemplatePlaceholders(bodyMd);
+    updateVersion(tx, versionId, { bodyMd });
+    return publishIn(tx, versionId, now, notes);
   });
 }
 

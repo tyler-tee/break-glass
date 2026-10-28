@@ -8,7 +8,8 @@ import { createSecretsStore } from '../../src/features/admin/secrets.js';
 import { hashPassword } from '../../src/features/admin/auth.js';
 import { installState } from '../../src/features/admin/install.js';
 import { listProtocols, listVersions } from '../../src/features/protocols/repo.js';
-import { publishVersion } from '../../src/features/protocols/service.js';
+import { publishVersion, updateDraftBody } from '../../src/features/protocols/service.js';
+import { SOP_HEADINGS } from '../../src/services/llm/draft.js';
 import { fixtureProvider } from '../../src/services/llm/fixture.js';
 import { adminLogin } from '../helpers/adminLogin.js';
 import { fakeSiteFetch } from '../helpers/fakeSiteFetch.js';
@@ -135,7 +136,10 @@ describe('protocol step', () => {
     const { db, post, get } = await harness();
     await post('/admin/setup/protocol/start', { title: 'Burns', path: 'manual' });
     const p = listProtocols(db)[0]!;
-    publishVersion(db, listVersions(db, p.id)[0]!.id, now);
+    const v = listVersions(db, p.id)[0]!;
+    // The untouched template can no longer be published, so fill it in first.
+    updateDraftBody(db, v.id, SOP_HEADINGS.map((h) => `${h}\ntext`).join('\n\n'), now);
+    publishVersion(db, v.id, now);
     const html = await (await get('/admin/setup/protocol')).text();
     expect(html).toContain('is published');
     expect(html).toContain(`href="/admin/protocols/${p.id}"`);

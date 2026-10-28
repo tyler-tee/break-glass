@@ -23,6 +23,7 @@ import {
   publishVersion,
   rejectVersion,
   runDraft,
+  saveAndPublish,
   submitForReview,
   updateDraftBody,
 } from './service.js';
@@ -215,7 +216,10 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
               <textarea name="body_md" rows={20}>
                 {opts.bodyMd ?? version.bodyMd}
               </textarea>
-              <button type="submit" class="btn-secondary">Save</button>
+              <div class="button-row">
+                <button type="submit" formaction={`${base}/save-publish${setupQs(opts.setup)}`}>Save and publish</button>
+                <button type="submit" class="btn-secondary">Save</button>
+              </div>
             </form>
             {version.status === 'draft' && (
               <form method="post" action={`${base}/submit${setupQs(opts.setup)}`}>
@@ -226,7 +230,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
               <label>
                 Notes <input name="notes" />
               </label>
-              <button type="submit">Approve &amp; publish</button>
+              <button type="submit" class="btn-secondary">Approve &amp; publish</button>
             </form>
             <form method="post" action={`${base}/reject${setupQs(opts.setup)}`}>
               <label>
@@ -283,6 +287,14 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
     '/:id/versions/:vid/body',
     reviewAction(
       (vid, f) => void updateDraftBody(db, vid, str(f['body_md']), now()),
+      (f) => str(f['body_md']),
+    ),
+  );
+  // Save and publish (the edit form primary button) saves the typed body and publishes it in one step.
+  app.post(
+    '/:id/versions/:vid/save-publish',
+    reviewAction(
+      (vid, f) => void saveAndPublish(db, vid, str(f['body_md']), now()),
       (f) => str(f['body_md']),
     ),
   );
