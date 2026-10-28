@@ -29,13 +29,17 @@ describe('layouts', () => {
     expect(res.status).toBe(404);
     const body = await res.text();
     expect(body.toLowerCase().startsWith('<!doctype html>')).toBe(true);
-    expect(body).toContain('/assets/styles.css');
+    expect(body).toContain('/assets/family.css');
+    expect(body).toContain('<body class="family">');
+    expect(body).not.toContain('/assets/styles.css');
   });
 
   it('unknown asset renders the layout 404', async () => {
     const res = await (await mkApp()).request('/assets/nope.css');
     expect(res.status).toBe(404);
-    expect(await res.text()).toContain('/assets/styles.css');
+    const body = await res.text();
+    expect(body).toContain('/assets/family.css');
+    expect(body).toContain('<body class="family">');
   });
 
   it('admin page carries one admin.js script tag', async () => {
@@ -67,7 +71,9 @@ describe('layouts', () => {
     const cookie = await adminLogin(app, 'correct horse');
     const res = await app.request('/admin/nope', { headers: { cookie } });
     expect(res.status).toBe(404);
-    expect(await res.text()).toContain('/admin/logout');
+    const body = await res.text();
+    expect(body).toContain('/admin/logout');
+    expect(body).toContain('/assets/styles.css');
   });
 
   it('onError renders a generic page without leaking the message', async () => {
@@ -78,7 +84,8 @@ describe('layouts', () => {
     const res = await app.request('/boom');
     expect(res.status).toBe(500);
     const body = await res.text();
-    expect(body).toContain('/assets/styles.css');
+    expect(body).toContain('/assets/family.css');
+    expect(body).toContain('<body class="family">');
     expect(body).not.toContain('secret-detail-xyz');
   });
 

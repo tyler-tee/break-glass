@@ -169,7 +169,7 @@ describe('refreshLocations', () => {
     expect(rowOf(id).status).toBe('approved');
   });
 
-  it('a closure found by refresh shows as reported closed, sorts last, and is in the API', async () => {
+  it('a closure found by refresh is hidden from family pages but still in the API', async () => {
     const hours = { periods: nearHours.periods, weekdayText: nearHours.weekdayText };
     const shutSnap = normalizeTracked({
       name: 'Shut Dental',
@@ -196,8 +196,9 @@ describe('refreshLocations', () => {
       now: () => now,
     });
     const html = await (await app.request('/search?q=dental')).text();
-    expect(html).toContain('Reported closed');
-    expect(html.indexOf('Shut Dental')).toBeGreaterThan(html.indexOf('Far Dental'));
+    expect(html).toContain('Far Dental');
+    expect(html).not.toContain('Shut Dental');
+    expect(await (await app.request('/c/dentist')).text()).not.toContain('Shut Dental');
     const api = (await (await app.request('/api/locations?q=dental')).json()) as {
       categories: { locations: { name: string; reportedClosed: boolean }[] }[];
     };

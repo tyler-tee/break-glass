@@ -9,11 +9,14 @@ const publicDir = fileURLToPath(new URL('../../public', import.meta.url));
 // Explicit allowlist: request name -> file under public/ and content type. No directory serving.
 const ALLOWED: Record<string, { file: string; type: string }> = {
   'styles.css': { file: 'styles.css', type: 'text/css; charset=utf-8' },
+  'family.css': { file: 'family.css', type: 'text/css; charset=utf-8' },
   'admin.js': { file: 'admin.js', type: 'text/javascript; charset=utf-8' },
   'favicon.svg': { file: 'favicon.svg', type: 'image/svg+xml' },
   'icon.svg': { file: 'icon.svg', type: 'image/svg+xml' },
   'manifest.webmanifest': { file: 'manifest.webmanifest', type: 'application/manifest+json' },
   'atkinson-hyperlegible-next.woff2': { file: 'fonts/atkinson-hyperlegible-next.woff2', type: 'font/woff2' },
+  'public-sans-latin.woff2': { file: 'fonts/public-sans-latin.woff2', type: 'font/woff2' },
+  'public-sans-latin-ext.woff2': { file: 'fonts/public-sans-latin-ext.woff2', type: 'font/woff2' },
 };
 
 type Loaded = { body: Buffer; type: string; hash: string };

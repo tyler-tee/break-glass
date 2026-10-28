@@ -47,9 +47,9 @@ describe('family visibility by status', () => {
       expect(search.includes(name), `search ${status}`).toBe(visible);
       expect(category.includes(name), `category ${status}`).toBe(visible);
       expect(api.includes(name), `api ${status}`).toBe(visible);
-      const code = visible ? 200 : 404;
-      expect((await app.request(`/l/${ids.get(status)}`)).status, `/l ${status}`).toBe(code);
-      expect((await app.request(`/api/locations/${ids.get(status)}`)).status, `/api/locations/:id ${status}`).toBe(code);
+      // /l/:id redirects to the category card when visible.
+      expect((await app.request(`/l/${ids.get(status)}`)).status, `/l ${status}`).toBe(visible ? 302 : 404);
+      expect((await app.request(`/api/locations/${ids.get(status)}`)).status, `/api/locations/:id ${status}`).toBe(visible ? 200 : 404);
     }
   });
 });

@@ -69,25 +69,26 @@ describe('protocol visibility', () => {
     }
   });
 
-  it('published renders with Sources section', async () => {
+  it('published renders with version and sources footer', async () => {
     seedPublished();
     const res = await app.request('/emergency/choking-adult');
     const html = await res.text();
     expect(res.status).toBe(200);
-    expect(html).toContain('Steps</h2>');
-    expect(html).toContain('Sources</h2>');
+    expect(html).toContain('<h1>Choking (adult)</h1>');
+    expect(html).toContain('<section class="steps"');
+    expect(html).toMatch(/<footer class="sop-meta">[\s\S]*Version 2[\s\S]*Sources/);
     expect(html).toContain(`href="${RC}"`);
     expect(html).toContain(`href="${NHS}"`);
-    expect(html).toContain('Published v2 - reviewed 2026-02-01');
+    expect(html).toContain('reviewed 2026-02-01');
   });
 
-  it('escalation and do-not render as callouts', async () => {
+  it('escalation, steps and do-not render as their own sections', async () => {
     seedPublished();
     const html = await (await app.request('/emergency/choking-adult')).text();
-    for (const h of ['Escalation criteria</h2>', 'Do not</h2>', 'Steps</h2>', 'Sources</h2>']) expect(html).toContain(h);
-    expect(html).toMatch(/data-callout="escalation"[^>]*>\s*<h2[^>]*>Escalation criteria<\/h2>/);
-    expect(html).toMatch(/data-callout="do-not"[^>]*>\s*<h2[^>]*>Do not<\/h2>/);
-    expect(html).not.toMatch(/data-callout="[^"]*"[^>]*>\s*<h2[^>]*>Steps/);
+    expect(html).toMatch(/<section class="escalate"[^>]*>\s*<h2[^>]*>Call 911 instead if<\/h2>/);
+    expect(html).toMatch(/<section class="steps"[^>]*>\s*<h2[^>]*>Steps<\/h2>/);
+    expect(html).toMatch(/<section class="do-not"[^>]*>\s*<h2[^>]*>Do not<\/h2>/);
+    expect(html).toContain('href="tel:911"');
   });
 
   it('superseded slug shows the new published body', async () => {
@@ -106,15 +107,14 @@ describe('protocol visibility', () => {
     expect(html).toContain('<h2');
   });
 
-  it('needs_rereview shows the badge on list and page', async () => {
+  it('needs_rereview shows the notice on list and page', async () => {
     const p = seedPublished();
     const reason = 'Source changed: https://redcross.example/choking';
     db.update(protocols).set({ needsRereview: true, rereviewReason: reason }).where(eq(protocols.id, p.id)).run();
     const list = await (await app.request('/emergency')).text();
     const page = await (await app.request('/emergency/choking-adult')).text();
-    expect(list).toContain('⚠');
-    expect(page).toContain('⚠');
-    expect(page).toContain(reason);
+    expect(list).toContain('Source changed · pending re-review');
+    expect(page).toContain('Sources changed recently');
   });
 
   it('api protocol detail has body and sources', async () => {

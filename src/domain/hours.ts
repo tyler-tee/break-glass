@@ -36,13 +36,11 @@ export function normalizeHours(
 }
 
 const WEEKDAYS: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_MIN = 1440;
+const WEEK_MIN = 7 * DAY_MIN;
 
-export function isOpenNow(
-  hours: WeeklyHours | null,
-  now: Date,
-  tz: string,
-): { state: 'open' | 'closed' | 'unknown'; until?: string } {
-  if (!hours) return { state: 'unknown' };
+function localDayTime(now: Date, tz: string): { day: number; hhmm: number } {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: tz,
     weekday: 'short',
@@ -51,8 +49,16 @@ export function isOpenNow(
     hourCycle: 'h23',
   }).formatToParts(now);
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
-  const day = WEEKDAYS[get('weekday')];
-  const t = Number(get('hour') + get('minute'));
+  return { day: WEEKDAYS[get('weekday')]!, hhmm: Number(get('hour') + get('minute')) };
+}
+
+export function isOpenNow(
+  hours: WeeklyHours | null,
+  now: Date,
+  tz: string,
+): { state: 'open' | 'closed' | 'unknown'; until?: string } {
+  if (!hours) return { state: 'unknown' };
+  const { day, hhmm: t } = localDayTime(now, tz);
 
   for (const iv of hours.periods[String(day) as DayKey]) {
     const open = Number(iv.open);
@@ -66,4 +72,75 @@ export function isOpenNow(
     }
   }
   return { state: 'closed' };
+}
+
+export type HoursStatus =
+  | { state: 'open'; label: string }
+  | { state: 'closed'; label: string }
+  | { state: 'unknown' };
+
+const toMin = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(2, 4));
+
+/** "9 PM", "7:30 AM", "midnight". Takes minutes since local midnight. */
+export function formatClock(minuteOfDay: number): string {
+  const m = ((minuteOfDay % DAY_MIN) + DAY_MIN) % DAY_MIN;
+  if (m === 0) return 'midnight';
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}${mm ? `:${String(mm).padStart(2, '0')}` : ''} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+// The week as merged [start, end) spans in minutes from Sunday 00:00. Overnight spans run past the
+// day boundary, and a span may run past the end of the week (it then wraps to Sunday).
+function weekSpans(hours: WeeklyHours): [number, number][] {
+  const spans: [number, number][] = [];
+  for (let d = 0; d < 7; d++) {
+    for (const iv of hours.periods[String(d) as DayKey]) {
+      const open = toMin(iv.open);
+      let close = toMin(iv.close);
+      if (close <= open) close += DAY_MIN;
+      spans.push([d * DAY_MIN + open, d * DAY_MIN + close]);
+    }
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const s of spans) {
+    const last = merged[merged.length - 1];
+    if (last && s[0] <= last[1]) last[1] = Math.max(last[1], s[1]);
+    else merged.push([...s]);
+  }
+  // A span that wraps past Saturday night can join the first span of Sunday.
+  const first = merged[0];
+  const last = merged[merged.length - 1];
+  if (merged.length > 1 && first && last && last[1] - WEEK_MIN >= first[0]) {
+    last[1] = Math.max(last[1], first[1] + WEEK_MIN);
+    merged.shift();
+  }
+  return merged;
+}
+
+/**
+ * What the family sees next to the open/closed pill: "open 24 hours", "until 9 PM",
+ * "opens 8 AM", "opens Mon 7:30 AM". A day name appears only when the time is 24 hours or more away.
+ */
+export function describeHours(hours: WeeklyHours | null, now: Date, tz: string): HoursStatus {
+  if (!hours) return { state: 'unknown' };
+  const spans = weekSpans(hours);
+  if (spans.length === 0) return { state: 'unknown' };
+  if (spans.some(([s, e]) => e - s >= WEEK_MIN)) return { state: 'open', label: 'open 24 hours' };
+
+  const { day, hhmm } = localDayTime(now, tz);
+  const t = day * DAY_MIN + Math.floor(hhmm / 100) * 60 + (hhmm % 100);
+  const at = (abs: number) => {
+    const delta = (((abs - t) % WEEK_MIN) + WEEK_MIN) % WEEK_MIN;
+    const time = formatClock(abs);
+    return delta >= DAY_MIN ? `${DAY_NAMES[Math.floor((abs % WEEK_MIN) / DAY_MIN)]} ${time}` : time;
+  };
+
+  for (const [s, e] of spans) {
+    if ((s <= t && t < e) || (s <= t + WEEK_MIN && t + WEEK_MIN < e)) return { state: 'open', label: `until ${at(e)}` };
+  }
+  const next = spans.find(([s]) => s > t) ?? spans[0]!;
+  return { state: 'closed', label: `opens ${at(next[0])}` };
 }

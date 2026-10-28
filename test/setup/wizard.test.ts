@@ -162,7 +162,8 @@ describe('wizard routes', () => {
     expect(getSettings(db)).toMatchObject({ householdName: 'The Smiths', emergencyNumber: '+1 (801) 555-0100' });
 
     const family = await (await app.request('/')).text();
-    expect(family).toMatch(/<span class="site-name">The Smiths<\/span>/);
+    expect(family).toContain('The Smiths');
+    expect(family).toContain('href="tel:+18015550100"');
   });
 
   it('household validation errors re-render with 400 beside the field', async () => {

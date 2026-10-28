@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import type { categories } from '../../db/schema.js';
 import { getCategoryBySlug } from '../categories/repo.js';
-import { isOpenNow } from '../../domain/hours.js';
+import { describeHours, isOpenNow, type HoursStatus } from '../../domain/hours.js';
 import type { FieldChange } from '../../domain/types.js';
 import {
   getVisibleRow,
@@ -13,12 +13,18 @@ import {
 
 export type LocationView = VisibleLocationRow & {
   openNow: ReturnType<typeof isOpenNow>;
+  hoursStatus: HoursStatus;
   openChanges: FieldChange[];
 };
 export type CategoryGroup = { category: typeof categories.$inferSelect; locations: LocationView[] };
 
 export function toView(db: Db, row: VisibleLocationRow, now: Date, tz: string): LocationView {
-  return { ...row, openNow: isOpenNow(row.hours, now, tz), openChanges: listOpenChanges(db, row.id) };
+  return {
+    ...row,
+    openNow: isOpenNow(row.hours, now, tz),
+    hoursStatus: describeHours(row.hours, now, tz),
+    openChanges: listOpenChanges(db, row.id),
+  };
 }
 
 // A closure counts when the row says so or when refresh has an open change reporting it.

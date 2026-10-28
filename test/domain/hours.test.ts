@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isOpenNow, normalizeHours } from '../../src/domain/hours.js';
+import { describeHours, isOpenNow, normalizeHours } from '../../src/domain/hours.js';
 import type { WeeklyHours } from '../../src/domain/types.js';
 
 const TZ = 'America/Denver';
@@ -75,5 +75,55 @@ describe('isOpenNow', () => {
     expect(isOpenNow(h, new Date('2026-10-28T05:30:00Z'), TZ)).toEqual({ state: 'open', until: '2359' });
     const wedOnly = hoursWith({ '3': [{ open: '0000', close: '2400' }] });
     expect(isOpenNow(wedOnly, new Date('2026-10-28T05:30:00Z'), TZ).state).toBe('closed');
+  });
+});
+
+describe('describeHours', () => {
+  const NY = 'America/New_York';
+  // 2026-10-31 is a Saturday; 18:00Z is 2:00 PM in New York.
+  const SAT_2PM = new Date('2026-10-31T18:00:00Z');
+  const weekdays = (open: string, close: string, days = ['1', '2', '3', '4', '5']) =>
+    hoursWith(Object.fromEntries(days.map((d) => [d, [{ open, close }]])));
+
+  it('unknown without hours or with an empty week', () => {
+    expect(describeHours(null, SAT_2PM, NY)).toEqual({ state: 'unknown' });
+    expect(describeHours(hoursWith({}), SAT_2PM, NY)).toEqual({ state: 'unknown' });
+  });
+
+  it('every day midnight to midnight reads as open 24 hours', () => {
+    const all = weekdays('0000', '2400', ['0', '1', '2', '3', '4', '5', '6']);
+    expect(describeHours(all, SAT_2PM, NY)).toEqual({ state: 'open', label: 'open 24 hours' });
+  });
+
+  it('open today says until the closing time, without minutes when on the hour', () => {
+    expect(describeHours(weekdays('0800', '2100', ['6']), SAT_2PM, NY)).toEqual({ state: 'open', label: 'until 9 PM' });
+    expect(describeHours(weekdays('0800', '1730', ['6']), SAT_2PM, NY)).toEqual({ state: 'open', label: 'until 5:30 PM' });
+  });
+
+  it('closed says when it next opens, naming the day only when a day or more away', () => {
+    expect(describeHours(weekdays('0730', '1600'), SAT_2PM, NY)).toEqual({ state: 'closed', label: 'opens Mon 7:30 AM' });
+    expect(describeHours(weekdays('1800', '2200', ['6']), SAT_2PM, NY)).toEqual({ state: 'closed', label: 'opens 6 PM' });
+    expect(describeHours(weekdays('0900', '1200', ['0']), SAT_2PM, NY)).toEqual({ state: 'closed', label: 'opens 9 AM' });
+  });
+
+  it('overnight spans run into the next day, and a short nightly break is not 24 hours', () => {
+    // Open 2:00 AM until 1:30 AM the next day, every day (a pharmacy with a 30-minute break).
+    const nightly = weekdays('0200', '0130', ['0', '1', '2', '3', '4', '5', '6']);
+    expect(describeHours(nightly, SAT_2PM, NY)).toEqual({ state: 'open', label: 'until 1:30 AM' });
+    const inBreak = new Date('2026-10-31T05:45:00Z'); // Sat 1:45 AM
+    expect(describeHours(nightly, inBreak, NY)).toEqual({ state: 'closed', label: 'opens 2 AM' });
+  });
+
+  it('a Saturday-night span wraps into Sunday', () => {
+    const late = hoursWith({ '6': [{ open: '2000', close: '0200' }] });
+    const sunOneAm = new Date('2026-11-01T05:00:00Z'); // Sun 1:00 AM EDT
+    expect(describeHours(late, sunOneAm, NY)).toEqual({ state: 'open', label: 'until 2 AM' });
+  });
+
+  it('uses the home time zone, not the server one', () => {
+    const h = weekdays('0800', '2100', ['6']);
+    // The same instant is Sat 10:30 PM in New York (closed) but Sat 7:30 PM in Los Angeles (open).
+    expect(describeHours(h, new Date('2026-11-01T02:30:00Z'), NY)).toEqual({ state: 'closed', label: 'opens Sat 8 AM' });
+    expect(describeHours(h, new Date('2026-11-01T02:30:00Z'), 'America/Los_Angeles')).toEqual({ state: 'open', label: 'until 9 PM' });
   });
 });

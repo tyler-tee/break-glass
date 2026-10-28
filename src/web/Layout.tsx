@@ -22,6 +22,8 @@ export type PageChrome = {
   emergencyNumber?: string;
   /** Admin layout only: which primary nav item is current. */
   activeNav?: AdminNavKey;
+  /** Family layout only: class on <main> (the home screen uses wider gaps). */
+  mainClass?: string;
 };
 
 /**
@@ -49,13 +51,20 @@ const NAV: { key: AdminNavKey; href: string; label: string }[] = [
   { key: 'protocols', href: '/admin/protocols', label: 'Protocols' },
 ];
 
-const Head: FC<{ title: string }> = ({ title }) => (
+const Head: FC<{ title: string; family?: boolean }> = ({ title, family }) => (
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f5f6e" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content={family ? '#f6f5f1' : '#0f5f6e'} />
     <title>{title}</title>
-    <link rel="stylesheet" href={assetUrl('styles.css')} />
+    {family ? (
+      <>
+        <link rel="preload" href={assetUrl('public-sans-latin.woff2')} as="font" type="font/woff2" crossorigin="anonymous" />
+        <link rel="stylesheet" href={assetUrl('family.css')} />
+      </>
+    ) : (
+      <link rel="stylesheet" href={assetUrl('styles.css')} />
+    )}
     <link rel="icon" href={assetUrl('favicon.svg')} type="image/svg+xml" />
     <link rel="manifest" href={assetUrl('manifest.webmanifest')} />
   </head>
@@ -79,20 +88,19 @@ const AdminNavList: FC<{ activeNav?: AdminNavKey; setupIncomplete: boolean }> = 
   </ul>
 );
 
-export const FamilyLayout: FC<PropsWithChildren<{ title: string; household: string }>> = ({
+// No site header: every family screen carries its own back button, per the approved mockup.
+export const FamilyLayout: FC<PropsWithChildren<{ title: string; mainClass?: string }>> = ({
   title,
-  household,
+  mainClass,
   children,
 }) => (
   <html lang="en">
-    <Head title={title} />
+    <Head title={title} family />
     <body class="family">
       <SkipLink />
-      <header class="site-header">
-        <span class="site-name">{household}</span>
-        <a href="/">Home</a>
-      </header>
-      <main id="main">{children}</main>
+      <main id="main" class={mainClass}>
+        {children}
+      </main>
     </body>
   </html>
 );
@@ -154,6 +162,10 @@ export function readLayoutContext(c: Context): LayoutContext {
   }
 }
 
+export function householdName(c: Context): string {
+  return readLayoutContext(c).household ?? DEFAULT_HOUSEHOLD;
+}
+
 export function page(
   c: Context,
   title: string,
@@ -172,7 +184,7 @@ export function page(
     ) : layout === 'auth' ? (
       <AuthLayout title={title}>{body}</AuthLayout>
     ) : (
-      <FamilyLayout title={title} household={chrome.household ?? ctx.household ?? DEFAULT_HOUSEHOLD}>
+      <FamilyLayout title={title} mainClass={chrome.mainClass}>
         {body}
       </FamilyLayout>
     );

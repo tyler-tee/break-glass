@@ -327,7 +327,7 @@ describe('unclaimed guards', () => {
     const h = harness();
     h.secrets.setAdminHash(await hashPassword(PW));
     const body = await (await h.app.request('/')).text();
-    expect(body).toContain('Find help nearby');
+    expect(body).toContain('Preparedness kit');
     expect(body).not.toContain('href="/setup"');
   });
 });

@@ -43,15 +43,36 @@ describe('family pages', () => {
     expect(html).not.toContain('Rejected Dental');
   });
 
-  it('home leads with the emergency-number call button, then protocols, then categories', async () => {
+  it('home orders search, protocols banner, call buttons, then tiles', async () => {
     const html = await (await app.request('/')).text();
+    expect(html).toContain('<h1>Preparedness kit</h1>');
+    expect(html).toContain('action="/search"');
+    expect(html).toContain('Find a provider');
+    expect(html).toContain('href="/emergency"');
+    expect(html).toContain('Emergency protocols');
     expect(html).toContain('href="tel:911"');
     expect(html).toContain('Call 911');
-    expect(html).toContain('href="/emergency"');
-    expect(html.indexOf('tel:911')).toBeLessThan(html.indexOf('href="/emergency"'));
-    expect(html.indexOf('href="/emergency"')).toBeLessThan(html.indexOf('role="search"'));
-    expect(html.indexOf('role="search"')).toBeLessThan(html.indexOf('class="tiles"'));
+    expect(html).toContain('href="tel:18002221222"');
+    expect(html).toContain('Vetted providers');
+    expect(html).toContain('href="/c/dentist"');
+    expect(html).toMatch(/\d+ vetted/);
+    expect(html).toContain('href="/categories"');
+    expect(html).toContain('All categories');
+    const search = html.indexOf('role="search"');
+    const banner = html.indexOf('href="/emergency"');
+    const call = html.indexOf('href="tel:911"');
+    const tiles = html.indexOf('class="tiles"');
+    expect(search).toBeGreaterThan(-1);
+    expect(search).toBeLessThan(banner);
+    expect(banner).toBeLessThan(call);
+    expect(call).toBeLessThan(tiles);
     expect(html).not.toContain('<script');
+  });
+
+  it('home tile shows how many vetted places need review', async () => {
+    insertDentist({ name: 'Review Dental', status: 'warn' });
+    const html = await (await app.request('/')).text();
+    expect(html).toMatch(/\d+ vetted · 1 to review/);
   });
 
   it('search escapes LIKE wildcards', async () => {
@@ -61,16 +82,18 @@ describe('family pages', () => {
     }
   });
 
-  it('blank query returns no groups', async () => {
-    for (const q of ['', '%20%20']) {
+  it('blank or unmatched query shows an empty state and categories, no cards', async () => {
+    for (const q of ['', '%20%20', 'zzzznomatch']) {
       const html = await (await app.request(`/search?q=${q}`)).text();
-      expect(html).toContain('No matches');
+      expect(html).toContain('class="empty"');
+      expect(html).toContain('href="/c/dentist"');
       expect(html).not.toContain('Near Dental');
+      expect(html).not.toContain('class="provider"');
     }
   });
 
   it('card renders without coords', async () => {
-    const row = insertDentist({
+    insertDentist({
       name: 'Bare Dental',
       lat: null,
       lng: null,
@@ -78,30 +101,36 @@ describe('family pages', () => {
       hours: null,
       phone: null,
     });
-    const res = await app.request(`/l/${row.id}`);
+    const res = await app.request('/search?q=Bare');
     const html = await res.text();
     expect(res.status).toBe(200);
     expect(html).toContain('Bare Dental');
     expect(html).toContain('Hours unknown');
     expect(html).not.toContain(' mi');
+    expect(html).toContain('Directions');
   });
 
-  it('location page has side-by-side Call and Directions and a native details block', async () => {
+  it('provider card has Call and Directions links and after-hours notes', async () => {
     const row = insertDentist({
       name: 'Detail Dental',
       phone: '+1 801 555 0199',
       address: '1 Main St',
       afterHoursNotes: 'Ring bell',
     });
-    const html = await (await app.request(`/l/${row.id}`)).text();
-    expect(html).toContain('<details');
+    const html = await (await app.request('/c/dentist')).text();
+    expect(html).toContain(`<article class="provider" id="place-${row.id}">`);
     expect(html).toContain('href="tel:+18015550199"');
-    expect(html).toMatch(/<a class="directions" href="https:\/\/[^"]+"[^>]*>[\s\S]*?Directions/);
+    expect(html).toMatch(/<a class="btn sm btn-outline" href="https:\/\/[^"]+"[^>]*>[\s\S]*?Directions/);
     expect(html).toContain('Ring bell');
-    expect(html.indexOf('Ring bell')).toBeGreaterThan(html.indexOf('<details'));
     expect(html).toContain('Hours unknown');
-    expect(html).toContain('<details');
-    expect(html.indexOf('Hours unknown')).toBeLessThan(html.indexOf('<details'));
+  });
+
+  it('/l/:id redirects to the place card in its category; unknown id is 404', async () => {
+    const row = insertDentist({ name: 'Redirect Dental' });
+    const res = await app.request(`/l/${row.id}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(`/c/dentist#place-${row.id}`);
+    expect((await app.request('/l/999999')).status).toBe(404);
   });
 
   it('home falls back to 911 when the stored number has no digits', async () => {
@@ -111,22 +140,24 @@ describe('family pages', () => {
     expect(html).toContain('Call 911');
   });
 
-  it('closed permanently sorts last', async () => {
+  it('closed permanently is hidden from family pages', async () => {
     insertDentist({ name: 'Shut Dental', businessStatus: 'CLOSED_PERMANENTLY', distanceMi: 0.1 });
-    const html = await (await app.request('/search?q=dentist')).text();
-    expect(html.indexOf('Shut Dental')).toBeGreaterThan(html.indexOf('Far Dental'));
-    expect(html).toContain('Reported closed');
+    for (const path of ['/search?q=dentist', '/c/dentist']) {
+      const html = await (await app.request(path)).text();
+      expect(html).toContain('Far Dental');
+      expect(html).not.toContain('Shut Dental');
+    }
   });
 
-  it('warn card shows badge with "phone"', async () => {
+  it('warn card says needs re-approval with the change sentence', async () => {
     const row = insertDentist({ name: 'Shifty Dental', status: 'warn' });
     db.insert(locationChanges)
       .values({ locationId: row.id, detectedAt: new Date(), field: 'phone', oldValue: '1', newValue: '2' })
       .run();
     const html = await (await app.request('/search?q=Shifty')).text();
     expect(html).toContain('Shifty Dental');
-    expect(html).toContain('⚠');
-    expect(html).toContain('phone');
+    expect(html).toContain('Needs re-approval');
+    expect(html).toContain('Phone number is now 2.');
   });
 
   it('category page lists its visible dentists and unknown slug is 404', async () => {

@@ -164,8 +164,10 @@ describe('re-review flag visibility', () => {
     const res = await app.request(`/emergency/${p.slug}`);
     const html = await res.text();
     expect(res.status).toBe(200);
-    expect(html).toContain('⚠');
-    expect(html).toContain(getProtocol(db, p.id)!.rereviewReason!);
+    expect(html).toContain('Sources changed recently');
+    expect(getProtocol(db, p.id)!.rereviewReason).toBeTruthy();
+    const list = await (await app.request('/emergency')).text();
+    expect(list).toContain('Source changed · pending re-review');
     const api = (await (await app.request('/api/protocols')).json()) as { protocols: { needsRereview: boolean }[] };
     expect(api.protocols[0]!.needsRereview).toBe(true);
   });
