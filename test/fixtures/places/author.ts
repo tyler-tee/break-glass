@@ -272,6 +272,122 @@ function authorRich(): void {
   rich('emergency dentist', [nearDentalRich, farDentalRich]);
 }
 
+// Home-trade results for the "Emergency electrician" category, hand-authored around CENTER. Run alone with: npx tsx test/fixtures/places/author.ts home
+const electricianType = { primaryType: 'electrician', primaryTypeDisplayName: { text: 'Electrician', languageCode: 'en' } };
+const voltCrew = {
+  // 5.0 over only 17 reviews, 1.6 mi out.
+  id: 'ChIJvolt',
+  displayName: { text: 'Volt Crew Electric', languageCode: 'en' },
+  formattedAddress: '720 E 900 S, Salt Lake City, UT 84105, USA',
+  shortFormattedAddress: '720 E 900 S, Salt Lake City',
+  location: { latitude: 40.784, longitude: -111.891 },
+  businessStatus: 'OPERATIONAL',
+  ...electricianType,
+  googleMapsUri: 'https://maps.google.com/?cid=3001',
+  rating: 5.0,
+  userRatingCount: 17,
+  regularOpeningHours: allDay,
+  currentOpeningHours: { openNow: true },
+  nationalPhoneNumber: '(801) 555-0601',
+  websiteUri: 'https://volt-crew.example',
+  reviews: [review('Fast and friendly, fixed our outlet.', 5, '3 months ago')],
+};
+const beehiveElectric = {
+  // 4.7 over 15k reviews, about 14.5 mi out (inside the 15-mile radius).
+  id: 'ChIJbeehive',
+  displayName: { text: 'Beehive Electric Services', languageCode: 'en' },
+  formattedAddress: '4400 S Redwood Rd, Taylorsville, UT 84123, USA',
+  shortFormattedAddress: '4400 S Redwood Rd, Taylorsville',
+  location: { latitude: 40.9695, longitude: -111.891 },
+  businessStatus: 'OPERATIONAL',
+  ...electricianType,
+  googleMapsUri: 'https://maps.google.com/?cid=3002',
+  rating: 4.7,
+  userRatingCount: 15200,
+  regularOpeningHours: allDay,
+  currentOpeningHours: { openNow: true },
+  nationalPhoneNumber: '(801) 555-0602',
+  websiteUri: 'https://beehive-electric.example',
+  reviews: [
+    review('Panel tripped at 2am on a Sunday and they sent a tech within the hour.', 5, 'a month ago'),
+    review('Called at 8am to avoid the after-hours price, as the dispatcher suggested.', 4, '4 months ago'),
+  ],
+};
+const sparkLine = {
+  // Two listings, one phone, different addresses: the pair the phone dedupe must catch.
+  id: 'ChIJspark1',
+  displayName: { text: 'Spark Line Electric', languageCode: 'en' },
+  formattedAddress: '310 S 200 W, Salt Lake City, UT 84101, USA',
+  shortFormattedAddress: '310 S 200 W, Salt Lake City',
+  location: { latitude: 40.7567, longitude: -111.9 },
+  businessStatus: 'OPERATIONAL',
+  ...electricianType,
+  googleMapsUri: 'https://maps.google.com/?cid=3003',
+  rating: 4.6,
+  userRatingCount: 540,
+  regularOpeningHours: allDay,
+  currentOpeningHours: { openNow: true },
+  nationalPhoneNumber: '(801) 555-0603',
+  websiteUri: 'https://spark-line.example',
+  reviews: [review('Only company that answered on Sunday, here in 40 minutes.', 5, '2 months ago')],
+};
+const sparkLineDup = {
+  ...sparkLine,
+  id: 'ChIJspark2',
+  displayName: { text: 'Spark Line 24/7 Emergency Electrician', languageCode: 'en' },
+  formattedAddress: '88 N 600 E, Salt Lake City, UT 84103, USA',
+  shortFormattedAddress: '88 N 600 E, Salt Lake City',
+  location: { latitude: 40.7745, longitude: -111.8815 },
+  googleMapsUri: 'https://maps.google.com/?cid=3004',
+  rating: 4.2,
+  userRatingCount: 26,
+  reviews: [],
+};
+const handymanElectric = {
+  id: 'ChIJhandy',
+  displayName: { text: 'Handyman and Electric', languageCode: 'en' },
+  formattedAddress: '1550 S State St, Salt Lake City, UT 84115, USA',
+  shortFormattedAddress: '1550 S State St, Salt Lake City',
+  location: { latitude: 40.738, longitude: -111.888 },
+  businessStatus: 'OPERATIONAL',
+  primaryType: 'general_contractor',
+  primaryTypeDisplayName: { text: 'General contractor', languageCode: 'en' },
+  googleMapsUri: 'https://maps.google.com/?cid=3005',
+  rating: 4.5,
+  userRatingCount: 210,
+  regularOpeningHours: {
+    periods: weekday,
+    weekdayDescriptions: weekdayText,
+  },
+  currentOpeningHours: { openNow: false },
+  nationalPhoneNumber: '(801) 555-0604',
+  reviews: [review('Good for small jobs around the house, not a 2am callout kind of outfit.', 4, '6 months ago')],
+};
+// No location field at all: Google sometimes omits it.
+const noLocationElectric = {
+  id: 'ChIJnoloc',
+  displayName: { text: 'Canyon Peak Electric', languageCode: 'en' },
+  formattedAddress: '2 Canyon Rd, Salt Lake City, UT 84108, USA',
+  businessStatus: 'OPERATIONAL',
+  ...electricianType,
+  rating: 4.4,
+  userRatingCount: 96,
+  regularOpeningHours: allDay,
+  nationalPhoneNumber: '(801) 555-0605',
+  reviews: [],
+};
+
+function authorHome(): void {
+  authorFixture(
+    FIXTURE_DIR,
+    { method: 'POST', url: `${BASE}/places:searchText`, body: richBody('emergency electrician') },
+    {
+      status: 200,
+      json: { places: [voltCrew, beehiveElectric, sparkLine, sparkLineDup, handymanElectric, noLocationElectric] },
+    },
+  );
+}
+
 function main(): void {
   authorRich();
   authorFixture(
@@ -460,4 +576,5 @@ function main(): void {
   );
 }
 
-main();
+if (process.argv[2] !== 'home') main();
+authorHome();

@@ -9,6 +9,7 @@ import {
   listRefreshable,
   updateLocationRow,
 } from '../features/locations/repo.js';
+import { extractOpts } from '../features/locations/websiteNotes.js';
 import { applyExtraction } from '../services/llm/extract.js';
 import type { Extractor } from '../services/llm/extract.js';
 import {
@@ -84,7 +85,7 @@ export async function refreshLocations(
         const website = tracked.website ?? row.website;
         if (extract && website) {
           const hasNotes = row.afterHoursNotes !== null || row.walkIns !== null || row.insuranceNotes !== null;
-          const result = await extract(website, hasNotes ? { skipIfHash: row.websiteHash } : undefined);
+          const result = await extract(website, extractOpts(row.area, hasNotes ? row.websiteHash : undefined));
           if (hasNotes && result.pageHash !== null && result.pageHash === row.websiteHash) {
             // Page text unchanged: carry the notes forward from the last snapshot instead of re-extracting.
             if (prevSnapshot) {
@@ -102,7 +103,7 @@ export async function refreshLocations(
               // Only remember the hash once extraction succeeded, so a failed run is retried.
               if (result.pageHash !== null) newHash = result.pageHash;
             }
-            tracked = applyExtraction(tracked, result.extraction);
+            tracked = applyExtraction(tracked, result.extraction, row.area);
           }
         }
         next = normalizeTracked(tracked);

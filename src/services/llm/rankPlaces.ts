@@ -8,7 +8,7 @@ import {
   type RankFacts,
   type RankFlag,
 } from '../../domain/ranking.js';
-import type { BusinessStatus, HoursNeed, LatLng, WeeklyHours } from '../../domain/types.js';
+import type { Area, BusinessStatus, HoursNeed, LatLng, WeeklyHours } from '../../domain/types.js';
 import type { PlaceCandidate, PlaceReview } from '../places/types.js';
 import type { LlmProvider } from './provider.js';
 
@@ -27,6 +27,7 @@ export type RankPlace = {
   primaryType: string | null;
   hours: WeeklyHours | null;
   openNow: boolean | null;
+  phone: string | null;
   reviews: PlaceReview[];
 };
 
@@ -43,6 +44,7 @@ export const rankPlaceFromCandidate = (c: PlaceCandidate): RankPlace => ({
   primaryType: c.primaryTypeDisplay ?? c.primaryType,
   hours: c.hours,
   openNow: c.openNow,
+  phone: c.phone,
   reviews: c.reviews,
 });
 
@@ -72,6 +74,12 @@ export function normAddr(address: string): string {
     .trim();
 }
 
+/** Phone key for spotting the same business listed at two addresses: digits only, last 10. */
+export function normPhone(phone: string | null | undefined): string | null {
+  const digits = (phone ?? '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : null;
+}
+
 const coordsOf = (p: RankPlace): LatLng | null => (p.lat !== null && p.lng !== null ? { lat: p.lat, lng: p.lng } : null);
 
 /**
@@ -80,7 +88,7 @@ const coordsOf = (p: RankPlace): LatLng | null => (p.lat !== null && p.lng !== n
  */
 export function prepass<T extends RankPlace>(
   places: T[],
-  opts: { home: LatLng; radiusMi: number },
+  opts: { home: LatLng; radiusMi: number; dedupePhone?: boolean },
 ): { kept: Prepared<T>[]; dropped: Dropped<T>[] } {
   const dropped: Dropped<T>[] = [];
   const near: { place: T; distanceMi: number | null }[] = [];
@@ -108,9 +116,11 @@ export function prepass<T extends RankPlace>(
     };
     const key = place.address ? normAddr(place.address) : null;
     const at = coordsOf(place);
+    const phoneKey = opts.dedupePhone ? normPhone(place.phone) : null;
     const original = kept.find((k) => {
       if (k.duplicateOfRef !== undefined) return false;
       if (key !== null && k.place.address && normAddr(k.place.address) === key) return true;
+      if (phoneKey !== null && normPhone(k.place.phone) === phoneKey) return true;
       const there = coordsOf(k.place);
       return at !== null && there !== null && haversineMi(at, there) * METERS_PER_MILE <= DUPLICATE_METERS;
     });
@@ -139,7 +149,32 @@ const MAX_REASON = 140;
 const MAX_REVIEWS = 5;
 const MAX_REVIEW_CHARS = 160;
 
-const systemPrompt = (category: { name: string; hoursNeed: HoursNeed }) =>
+type RankCategory = { name: string; hoursNeed: HoursNeed; area?: Area };
+
+const homeSystemPrompt = (category: RankCategory) =>
+  [
+    `You rank places for a household emergency directory. In an emergency only three things matter: is it OPEN when we'd need it, is it any GOOD, and is it NEAR. Pick at most ${PICKS_PER_CATEGORY}, mark others backup or avoid.`,
+    '',
+    `The category is "${category.name}". This category's hours need is "${category.hoursNeed}".`,
+    '- overnight: it should come out at any hour. Most listings here claim "Open 24 hours", so a bare 24h claim proves little on its own; weigh it against real evidence of after-hours response. Mark a place that is clearly NOT 24h as avoid with flag not_24h (open24h is given to you).',
+    '- daytime: 24h is not required; evening and weekend availability is a plus, not a must.',
+    '',
+    'Rules:',
+    '- The strongest signal is a review describing a real after-hours, weekend, same-day, or emergency callout ("came out at 2am", "only company that answered on Sunday", "responded Memorial Day weekend"). Weigh it heavily. Watch for counter-signals ("would not come until morning", "no after-hours service", "called at 8am to avoid after-hours prices").',
+    '- Weigh rating WITH review count. Prefer proven volume over a perfect score on a few reviews: a 5.0 from ~15 reviews is weaker than a 4.7 from thousands. Flag few_reviews under ~15; flag poor_reviews for low ratings or clearly bad review text.',
+    '- Flag wrong_kind when the name and reviews show the wrong trade for this category (a parts store, a new-construction contractor who does no emergencies, a handyman where a licensed trade is needed). A mixed-trade firm that clearly covers this trade (e.g. "AC & Plumbing", "Air & Electric") is fine; do NOT flag it wrong_kind for also doing other trades.',
+    '- Flag referral_listing for lead-gen / dispatch / aggregator entries: generic names like "24/7 Emergency Plumber", few reviews, the same phone or address repeated across listings, or reviews complaining about a call center or subcontractor.',
+    '- When two entries share an address or phone (dup of #N given), keep the better one and flag the other duplicate.',
+    '- Flag far when distance makes it a weak pick given closer equals.',
+    '- Flag check_hours when listed hours look implausible or contradict the reviews.',
+    `- reason: <=${MAX_REASON} chars, plain, written FOR the household admin ("Came out same day in reviews, 4.7 over 15k"). No marketing.`,
+    'Return only the schema.',
+  ].join('\n');
+
+const systemPrompt = (category: RankCategory) =>
+  category.area === 'home' ? homeSystemPrompt(category) : healthSystemPrompt(category);
+
+const healthSystemPrompt = (category: RankCategory) =>
   [
     `You rank places for a household emergency directory. In an emergency only three things matter: is it OPEN when we'd need it, is it any GOOD, and is it NEAR. Pick at most ${PICKS_PER_CATEGORY}, mark others backup or avoid.`,
     '',
@@ -168,7 +203,7 @@ function reviewText(r: PlaceReview): string | null {
   return meta ? `${quoted} (${meta})` : quoted;
 }
 
-function placeBlock(p: Prepared): string {
+function placeBlock(p: Prepared, area: Area): string {
   const { place, profile } = p;
   const name = p.duplicateOfRef !== undefined ? `${place.name} (dup of #${p.duplicateOfRef})` : place.name;
   const where = [
@@ -187,20 +222,22 @@ function placeBlock(p: Prepared): string {
     .map(reviewText)
     .filter((r): r is string => r !== null)
     .slice(0, MAX_REVIEWS);
+  if (area === 'home') lines.push(`   phone: ${place.phone ?? 'none'}`);
   if (reviews.length > 0) lines.push(`   reviews: ${reviews.join('; ')}`);
   return lines.join('\n');
 }
 
 /** The ranking prompt: integer refs only (never place ids), at most 5 reviews each, each clipped. */
 export function buildRankPrompt(
-  category: { name: string; hoursNeed: HoursNeed },
+  category: RankCategory,
   places: Prepared[],
 ): { system: string; prompt: string } {
+  const area = category.area ?? 'health';
   const prompt = [
     `Category: ${category.name} (hours need: ${category.hoursNeed})`,
     `Places (${places.length}):`,
     '',
-    places.map(placeBlock).join('\n\n'),
+    places.map((p) => placeBlock(p, area)).join('\n\n'),
   ].join('\n');
   return { system: systemPrompt(category), prompt };
 }
@@ -248,7 +285,7 @@ export function repairRanking(output: RankOutput, places: Prepared[], hoursNeed:
 export async function rankWithLlm(
   llm: LlmProvider,
   model: string,
-  category: { name: string; hoursNeed: HoursNeed },
+  category: RankCategory,
   places: Prepared[],
 ): Promise<PlaceRanking[]> {
   if (places.length === 0) return [];

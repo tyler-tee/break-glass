@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { AppDeps } from '../../app.js';
 import type { Db, DbOrTx } from '../../db/client.js';
 import { settings } from '../../db/schema.js';
-import type { Logger, ProtocolStatus } from '../../domain/types.js';
+import type { Area, Logger, ProtocolStatus } from '../../domain/types.js';
 import { SOP_HEADINGS, assertSopHeadings, draftProtocol } from '../../services/llm/draft.js';
 import { LlmRefusalError, LlmValidationError, type LlmProvider } from '../../services/llm/provider.js';
 import { llmOf } from '../../services/resolver.js';
@@ -100,7 +100,7 @@ export async function generateDraft(
     pages.push(page);
   }
 
-  const bodyMd = await draftProtocol(deps.llm, deps.model, { title: protocol.title, sources: pages });
+  const bodyMd = await draftProtocol(deps.llm, deps.model, { title: protocol.title, sources: pages, area: protocol.area });
 
   const now = deps.now();
   return db.transaction((tx) => {
@@ -185,19 +185,20 @@ const SCOPE_PLACEHOLDER = 'What this covers and who it is for.';
 const STEP_PLACEHOLDER = '1. First step.';
 const DO_NOT_PLACEHOLDER = '- Common mistake to avoid.';
 /** The escalation example, built from the household emergency number. The trailing "if ..." is the marker. */
-const escalationPlaceholder = (emergencyNumber: string): string => `Call ${emergencyNumber} or go to the ER if ...`;
-const ESCALATION_PLACEHOLDER = /^Call .+ or go to the ER if \.\.\.$/;
+const escalationPlaceholder = (emergencyNumber: string, area: Area): string =>
+  area === 'home' ? `Call ${emergencyNumber} or leave the house if ...` : `Call ${emergencyNumber} or go to the ER if ...`;
+const ESCALATION_PLACEHOLDER = /^Call .+ if \.\.\.$/;
 const PLACEHOLDER_LINES: readonly string[] = [SCOPE_PLACEHOLDER, STEP_PLACEHOLDER, DO_NOT_PLACEHOLDER];
 
 export const PLACEHOLDER_MESSAGE = 'Replace the example text in every section before publishing.';
 
 /** The hand-written starting point: the four required headings, each with an example line to replace. */
-export function manualTemplate(emergencyNumber: string): string {
+export function manualTemplate(emergencyNumber: string, area: Area = 'health'): string {
   return (
     [
       `${SOP_HEADINGS[0]}\n${SCOPE_PLACEHOLDER}`,
       `${SOP_HEADINGS[1]}\n${STEP_PLACEHOLDER}`,
-      `${SOP_HEADINGS[2]}\n${escalationPlaceholder(emergencyNumber)}`,
+      `${SOP_HEADINGS[2]}\n${escalationPlaceholder(emergencyNumber, area)}`,
       `${SOP_HEADINGS[3]}\n${DO_NOT_PLACEHOLDER}`,
     ].join('\n\n') + '\n'
   );
@@ -224,12 +225,13 @@ function assertNoTemplatePlaceholders(bodyMd: string): void {
  * is returned instead of creating a second open draft.
  */
 export function createManualDraft(db: Db, protocolId: number, now: Date): ProtocolVersion {
-  if (!getProtocol(db, protocolId)) throw new ProtocolError('not_found', 'Protocol not found');
+  const protocol = getProtocol(db, protocolId);
+  if (!protocol) throw new ProtocolError('not_found', 'Protocol not found');
   return db.transaction((tx) => {
     const open = listVersions(tx, protocolId).find((v) => v.status === 'draft' || v.status === 'in_review');
     if (open) return open;
     const number = tx.select({ n: settings.emergencyNumber }).from(settings).where(eq(settings.id, 1)).get()?.n || '911';
-    const bodyMd = manualTemplate(number);
+    const bodyMd = manualTemplate(number, protocol.area);
     assertSopHeadings(bodyMd);
     return insertVersion(tx, {
       protocolId,

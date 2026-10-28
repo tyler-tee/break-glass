@@ -192,6 +192,7 @@ const rankPlaceFromRow = (row: Location): RankPlace => ({
   primaryType: row.primaryType,
   hours: row.hours,
   openNow: null,
+  phone: row.phone,
   reviews: [],
 });
 
@@ -237,7 +238,7 @@ async function findAndRankCategory(
     items.push({ ...rankPlaceFromRow(row), row, candidate: null });
   }
 
-  const { kept, dropped } = prepass(items, area);
+  const { kept, dropped } = prepass(items, { ...area, dedupePhone: category.area === 'home' });
   let ranking: PlaceRanking[];
   let rankedBy: RankedBy = 'rules';
   let message: string | undefined;

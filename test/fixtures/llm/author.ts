@@ -6,6 +6,7 @@ import { fetchPage, fetchWebsiteText } from '../../../src/services/llm/web.js';
 import { buildRankPrompt, prepass, rankPlaceFromCandidate } from '../../../src/services/llm/rankPlaces.js';
 import { CallBudget, richSearch } from '../../../src/services/places/client.js';
 import type { PlaceCandidate } from '../../../src/services/places/types.js';
+import { HOME_DRAFT_SOURCES, HOME_DRAFT_TITLE, HOME_EXTRACT_URL, HOME_RANK_CATEGORY } from './homeInputs.js';
 import { recordingFetch } from '../../helpers/recordingFetch.js';
 import { authorLlmFixture } from '../../helpers/authorLlmFixture.js';
 import { fakeSiteFetch } from '../../helpers/fakeSiteFetch.js';
@@ -86,7 +87,92 @@ async function authorRanking(): Promise<void> {
   console.log(authorLlmFixture(LLM_DIR, { model: DRAFT_MODEL, system, prompt }, raw));
 }
 
+// Home-area fixtures. Run alone (leaving the health fixtures untouched) with: npx tsx test/fixtures/llm/author.ts home
+const GAS_BODY = [
+  '## Title and scope',
+  'Gas smell or CO alarm: what a family member or sitter does when the home may have a gas leak or carbon monoxide.',
+  '',
+  '## Steps',
+  '1. Leave the house right away and take everyone, including pets.',
+  '2. From outside, call 911 or the gas utility emergency line.',
+  '3. For the location of the gas shutoff and the utility number, see House facts.',
+  '4. Stay outside until the gas utility or fire department says it is safe.',
+  '',
+  '## Escalation criteria',
+  '- Call 911 for any gas smell, CO alarm, or anyone feeling dizzy or sick.',
+  '- Get everyone out first; call from outside.',
+  '',
+  '## Do not',
+  '- Do not turn lights or appliances on or off.',
+  '- Do not go back inside before the utility or fire department says it is safe.',
+  '- Do not try to repair gas pipes or appliances.',
+].join('\n');
+
+async function authorHomeDraft(): Promise<void> {
+  const fetchImpl = fakeSiteFetch(WEB_FIXTURES);
+  const sources = [];
+  for (const url of HOME_DRAFT_SOURCES) {
+    const page = await fetchPage(url, { fetch: fetchImpl, lookup: publicLookup });
+    if (!page) throw new Error(`fixture page missing: ${url}`);
+    sources.push(page);
+  }
+  const { system, prompt } = buildDraftPrompt(HOME_DRAFT_TITLE, sources, 'home');
+  console.log(authorLlmFixture(LLM_DIR, { model: DRAFT_MODEL, system, prompt }, JSON.stringify({ bodyMd: GAS_BODY })));
+}
+
+async function authorHomeRanking(): Promise<void> {
+  const places = {
+    fetch: recordingFetch(path.resolve(import.meta.dirname, '../places'), 'replay'),
+    apiKey: 'test',
+    budget: new CallBudget(10),
+  };
+  const merged = new Map<string, PlaceCandidate>();
+  for (const c of await richSearch('emergency electrician', { center: RANK_HOME, radiusMi: 15 }, places)) {
+    if (!merged.has(c.placeId)) merged.set(c.placeId, c);
+  }
+  const { kept } = prepass([...merged.values()].map(rankPlaceFromCandidate), {
+    home: RANK_HOME,
+    radiusMi: 15,
+    dedupePhone: true,
+  });
+  const { system, prompt } = buildRankPrompt(HOME_RANK_CATEGORY, kept);
+  const ref = (name: string) => kept.find((k) => k.place.name === name)!.ref;
+  const raw = JSON.stringify({
+    places: [
+      { ref: ref('Beehive Electric Services'), verdict: 'pick', rank: 1, reason: 'Sent a tech at 2am on a Sunday in reviews, 4.7 over 15k.', flags: ['far'] },
+      { ref: ref('Spark Line Electric'), verdict: 'pick', rank: 2, reason: 'Only one to answer on a Sunday per reviews, 4.6 over 540.', flags: [] },
+      { ref: ref('Canyon Peak Electric'), verdict: 'backup', rank: 3, reason: 'Decent 4.4 over 96 but no callout evidence; no map location.', flags: [] },
+      { ref: ref('Volt Crew Electric'), verdict: 'backup', rank: 4, reason: 'Nearest, but 5.0 is only 17 reviews.', flags: ['few_reviews'] },
+      { ref: ref('Handyman and Electric'), verdict: 'avoid', rank: 5, reason: 'Weekday hours and reviews say no after-hours callouts.', flags: ['wrong_kind', 'check_hours'] },
+      { ref: ref('Spark Line 24/7 Emergency Electrician'), verdict: 'avoid', rank: 6, reason: 'Same phone as Spark Line Electric.', flags: ['duplicate', 'referral_listing'] },
+    ],
+  });
+  console.log(authorLlmFixture(LLM_DIR, { model: DRAFT_MODEL, system, prompt }, raw));
+}
+
+async function authorHomeExtraction(): Promise<void> {
+  const pages = await fetchWebsiteText(HOME_EXTRACT_URL, { fetch: fakeSiteFetch(WEB_FIXTURES), lookup: publicLookup });
+  const { system, prompt } = buildExtractionPrompt(pages, 'home');
+  // The page mentions walk-ins and insurance; the home prompt says to ignore them, and applying the result drops them anyway.
+  const raw = JSON.stringify({
+    afterHoursNotes: {
+      value: '24/7 emergency service including weekends and holidays; $150 after-hours trip fee.',
+      sourceUrl: 'https://rapid-rooter.example/emergency',
+    },
+    walkIns: { value: true, sourceUrl: 'https://rapid-rooter.example/emergency' },
+    insuranceNotes: { value: 'Accepts all major insurance plans.', sourceUrl: 'https://rapid-rooter.example/emergency' },
+  });
+  console.log(authorLlmFixture(LLM_DIR, { model: MODEL, system, prompt }, raw));
+}
+
 async function main(): Promise<void> {
+  if (process.argv[2] !== 'home') await mainHealth();
+  await authorHomeDraft();
+  await authorHomeRanking();
+  await authorHomeExtraction();
+}
+
+async function mainHealth(): Promise<void> {
   await author(
     'https://near-dental.example/',
     JSON.stringify({

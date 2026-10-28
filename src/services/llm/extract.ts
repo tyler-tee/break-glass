@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { Logger, TrackedFields } from '../../domain/types.js';
+import type { Area, Logger, TrackedFields } from '../../domain/types.js';
 import { LlmRefusalError, LlmValidationError, type LlmProvider } from './provider.js';
 import { fetchWebsiteText, type LookupFn } from './web.js';
 
@@ -15,7 +15,7 @@ export const ExtractionSchema = z.object({
 export type Extraction = z.infer<typeof ExtractionSchema>;
 export type ExtractResult = { extraction: Extraction | null; pageHash: string | null };
 // When skipIfHash equals the fetched page hash, the LLM is not called and extraction is null.
-export type Extractor = (website: string, opts?: { skipIfHash?: string | null }) => Promise<ExtractResult>;
+export type Extractor = (website: string, opts?: { skipIfHash?: string | null; area?: Area }) => Promise<ExtractResult>;
 
 export function hashPages(pages: { url: string; text: string }[]): string {
   const h = createHash('sha256');
@@ -27,7 +27,7 @@ ${p.text}
 
 const MAX_PROMPT_CHARS = 60_000;
 
-const SYSTEM = [
+const HEALTH_SYSTEM = [
   'You are extracting facts for a family emergency directory.',
   'Answer only from the page text given; never infer or invent.',
   'For each field return null unless the page explicitly states it.',
@@ -36,7 +36,23 @@ const SYSTEM = [
   'walkIns is true only if walk-ins are explicitly accepted, and false only if walk-ins are explicitly not accepted.',
 ].join('\n');
 
-export function buildExtractionPrompt(pages: { url: string; text: string }[]): { system: string; prompt: string } {
+const HOME_SYSTEM = [
+  'You are extracting facts for a family emergency directory of home-trade businesses (plumbers, electricians, HVAC, water damage, locksmiths).',
+  'Answer only from the page text given; never infer or invent.',
+  'For each field return null unless the page explicitly states it.',
+  'sourceUrl must be one of the given page URLs, or null.',
+  'Keep notes under 200 characters, plain text.',
+  'afterHoursNotes: whether the business offers 24/7, emergency, or after-hours service, plus any after-hours, trip, or emergency-call fees, exactly as stated. Null if the page does not say.',
+  'walkIns: always return null.',
+  'insuranceNotes: always return null.',
+].join('\n');
+
+const SYSTEM_BY_AREA: Record<Area, string> = { health: HEALTH_SYSTEM, home: HOME_SYSTEM };
+
+export function buildExtractionPrompt(
+  pages: { url: string; text: string }[],
+  area: Area = 'health',
+): { system: string; prompt: string } {
   let prompt = '';
   for (const page of pages) {
     const block = `${prompt === '' ? '' : '\n\n'}### ${page.url}\n${page.text}`;
@@ -47,7 +63,7 @@ export function buildExtractionPrompt(pages: { url: string; text: string }[]): {
     }
     prompt += block;
   }
-  return { system: SYSTEM, prompt };
+  return { system: SYSTEM_BY_AREA[area], prompt };
 }
 
 export function makeExtractor(deps: {
@@ -69,7 +85,7 @@ export function makeExtractor(deps: {
       if (pages.length === 0) return { extraction: null, pageHash };
       pageHash = hashPages(pages);
       if (opts?.skipIfHash != null && opts.skipIfHash === pageHash) return { extraction: null, pageHash };
-      const { system, prompt } = buildExtractionPrompt(pages);
+      const { system, prompt } = buildExtractionPrompt(pages, opts?.area ?? 'health');
       const result = await llm.generateJson({
         model,
         system,
@@ -99,12 +115,13 @@ export function makeExtractor(deps: {
   };
 }
 
-export function applyExtraction(tracked: TrackedFields, e: Extraction | null): TrackedFields {
+/** Home trades have no walk-ins or insurance notes, so those are never stored for them, whatever the model said. */
+export function applyExtraction(tracked: TrackedFields, e: Extraction | null, area: Area = 'health'): TrackedFields {
   if (e === null) return { ...tracked };
   return {
     ...tracked,
     afterHoursNotes: e.afterHoursNotes.value,
-    walkIns: e.walkIns.value,
-    insuranceNotes: e.insuranceNotes.value,
+    walkIns: area === 'home' ? null : e.walkIns.value,
+    insuranceNotes: area === 'home' ? null : e.insuranceNotes.value,
   };
 }

@@ -5,8 +5,8 @@ export type PlaceSummary = {
   placeId: string;
   name: string;
   address: string | null;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   rating: number | null;
   ratingCount: number | null;
   businessStatus: BusinessStatus | null;
@@ -26,8 +26,8 @@ export type PlaceCandidate = {
   name: string;
   address: string | null;
   shortAddress: string | null;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   businessStatus: BusinessStatus | null;
   rating: number | null;
   ratingCount: number | null;
@@ -45,7 +45,7 @@ export type RawPlace = {
   id: string;
   displayName: { text: string };
   formattedAddress?: string;
-  location: { latitude: number; longitude: number };
+  location?: { latitude: number; longitude: number };
   rating?: number;
   userRatingCount?: number;
   businessStatus?: BusinessStatus;

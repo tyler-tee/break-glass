@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import type { Db, DbOrTx } from '../../db/client.js';
 import { categories, locationChanges, locationSnapshots, locations } from '../../db/schema.js';
-import type { FieldChange, TrackedFields } from '../../domain/types.js';
+import type { Area, FieldChange, TrackedFields } from '../../domain/types.js';
 
 export type Location = typeof locations.$inferSelect;
 export type LocationWithCategory = Location & { categoryName: string };
@@ -82,13 +82,15 @@ export function resolveOpenChanges(db: DbOrTx, locationId: number, resolvedAt: D
     .run().changes;
 }
 
-export function listRefreshable(db: Db): Location[] {
+export function listRefreshable(db: Db): (Location & { area: Area })[] {
   return db
-    .select()
+    .select({ location: locations, area: categories.area })
     .from(locations)
+    .innerJoin(categories, eq(locations.categoryId, categories.id))
     .where(and(inArray(locations.status, [...VISIBLE]), isNotNull(locations.placeId)))
     .orderBy(asc(locations.id))
-    .all();
+    .all()
+    .map((r) => ({ ...r.location, area: r.area }));
 }
 
 export function latestSnapshot(

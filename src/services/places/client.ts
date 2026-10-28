@@ -81,8 +81,8 @@ const summarize = (p: RawPlace): PlaceSummary => ({
   placeId: p.id,
   name: p.displayName.text,
   address: p.formattedAddress ?? null,
-  lat: p.location.latitude,
-  lng: p.location.longitude,
+  lat: p.location?.latitude ?? null,
+  lng: p.location?.longitude ?? null,
   rating: p.rating ?? null,
   ratingCount: p.userRatingCount ?? null,
   businessStatus: p.businessStatus ?? null,
@@ -131,8 +131,8 @@ const toCandidate = (p: RawRichPlace): PlaceCandidate => {
     name: p.displayName.text,
     address: p.formattedAddress ?? null,
     shortAddress: p.shortFormattedAddress ?? null,
-    lat: p.location.latitude,
-    lng: p.location.longitude,
+    lat: p.location?.latitude ?? null,
+    lng: p.location?.longitude ?? null,
     businessStatus: p.businessStatus ?? null,
     rating: p.rating ?? null,
     ratingCount: p.userRatingCount ?? null,
@@ -190,7 +190,7 @@ export async function placeDetails(placeId: string, deps: PlacesDeps): Promise<P
 
 export async function geocode(address: string, deps: PlacesDeps): Promise<LatLng | null> {
   const [first] = await textSearch(address, undefined, deps);
-  return first ? { lat: first.lat, lng: first.lng } : null;
+  return first && first.lat !== null && first.lng !== null ? { lat: first.lat, lng: first.lng } : null;
 }
 
 export function detailsToTracked(d: PlaceDetails): TrackedFields {
