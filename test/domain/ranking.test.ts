@@ -108,10 +108,26 @@ describe('fallbackRank', () => {
     expect(ranked[1]!.flags).toEqual(['closed_temporarily']);
   });
 
-  it('three picks, four backups, the rest avoid', () => {
+  it('three picks, then backups: a clean place past the top 7 is still a backup, not ruled out', () => {
     const ranked = fallbackRank('overnight', Array.from({ length: 9 }, (_, i) => facts(i + 1, { distanceMi: i + 1 })));
-    expect(ranked.map((r) => r.verdict)).toEqual(['pick', 'pick', 'pick', 'backup', 'backup', 'backup', 'backup', 'avoid', 'avoid']);
+    expect(ranked.map((r) => r.verdict)).toEqual(['pick', 'pick', 'pick', 'backup', 'backup', 'backup', 'backup', 'backup', 'backup']);
     expect(ranked.map((r) => r.ref)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(ranked[8]!.reason).toBe('Open 24 hours, 4.5★ across 200 reviews, 9.0 mi.');
+  });
+
+  it('past the top 7, a flagged place is avoid; inside the top 7, few reviews alone never rule a place out', () => {
+    const ranked = fallbackRank('overnight', [
+      facts(1, { distanceMi: 1, rating: 4.9, ratingCount: 6 }), // few reviews, but still near the top
+      ...Array.from({ length: 6 }, (_, i) => facts(i + 2, { distanceMi: i + 2 })),
+      facts(9, { distanceMi: 30, rating: 4, ratingCount: 4 }),
+    ]);
+    const of = (ref: number) => ranked.find((r) => r.ref === ref)!;
+    expect(ranked).toHaveLength(8);
+    expect(ranked[7]!.ref).toBe(9);
+    expect(of(1)).toMatchObject({ flags: ['few_reviews'] });
+    expect(of(1).verdict).not.toBe('avoid');
+    expect(of(9)).toMatchObject({ verdict: 'avoid', flags: ['few_reviews'], reason: 'Open 24 hours, 4.0★ across 4 reviews, 30.0 mi.' });
+    expect(ranked.filter((r) => r.verdict === 'avoid').map((r) => r.ref)).toEqual([9]);
   });
 
   it('handles a missing rating and an unknown distance', () => {

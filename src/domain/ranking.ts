@@ -41,6 +41,7 @@ export type RankFacts = {
   profile: HoursProfile;
 };
 
+// Past the first 3 + BACKUPS, a flagged place is avoid rather than one more backup.
 const BACKUPS = 4;
 // Bayesian prior: a rating pulled toward 3.8 as if from 20 extra reviews.
 const PRIOR_RATING = 3.8;
@@ -60,8 +61,9 @@ function factsReason(p: RankFacts, hoursNeed: HoursNeed): string {
 }
 
 /**
- * Ranking without an LLM: Bayesian-smoothed rating × distance decay × hours, best first. The top 3 are picks,
- * the next 4 backups, the rest avoid; places that fail the hours gate or are temporarily closed are always avoid.
+ * Ranking without an LLM: Bayesian-smoothed rating × distance decay × hours, best first. The top 3 are picks and
+ * the rest backups. Places that fail the hours gate or are temporarily closed are always avoid, and so are flagged
+ * places (few reviews) past the top 3 + 4, so a long tail of thin listings does not read as a list of backups.
  */
 export function fallbackRank(hoursNeed: HoursNeed, places: RankFacts[]): PlaceRanking[] {
   const scored = places.map((p, index) => {
@@ -99,7 +101,12 @@ export function fallbackRank(hoursNeed: HoursNeed, places: RankFacts[]): PlaceRa
   const gated = scored.filter((s) => s.gated).sort(byScore);
   return [...open, ...gated].map((s, i) => ({
     ref: s.p.ref,
-    verdict: s.gated || i >= PICKS_PER_CATEGORY + BACKUPS ? 'avoid' : i < PICKS_PER_CATEGORY ? 'pick' : 'backup',
+    verdict:
+      s.gated || (i >= PICKS_PER_CATEGORY + BACKUPS && s.flags.length > 0)
+        ? 'avoid'
+        : i < PICKS_PER_CATEGORY
+          ? 'pick'
+          : 'backup',
     rank: i + 1,
     reason: s.reason,
     flags: s.flags,
