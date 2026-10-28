@@ -5,7 +5,7 @@ import type { Db } from '../../../db/client.js';
 import type { page } from '../../../web/Layout.js';
 import { nextStep, prevStep, stepPath, type Step } from './steps.js';
 
-export type Status = 200 | 400 | 429 | 502;
+export type Status = 200 | 400 | 429 | 502 | 503;
 export type Errors = Partial<Record<string, string>>;
 export type Go = 'next' | 'skip' | 'back' | 'later';
 

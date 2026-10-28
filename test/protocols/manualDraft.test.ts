@@ -126,4 +126,15 @@ describe('manual draft routes (no LLM configured)', () => {
     expect(await (await get(`${url}?from=evil`)).text()).not.toContain('Back to setup');
     expect(await (await get(url)).text()).not.toContain('Back to setup');
   });
+
+  it('keeps from=setup on the Back to protocol link and disables Generate draft with aria-describedby', async () => {
+    const p = proto();
+    const v = createManualDraft(db, p.id, NOW);
+    const { get } = await harness();
+    const html = await (await get(`/admin/protocols/${p.id}/versions/${v.id}?from=setup`)).text();
+    expect(html).toContain(`href="/admin/protocols/${p.id}?from=setup"`);
+    const detail = await (await get(`/admin/protocols/${p.id}`)).text();
+    expect(detail).toMatch(/<button[^>]*aria-describedby="no-llm-note"/);
+    expect(detail).toContain('id="no-llm-note"');
+  });
 });

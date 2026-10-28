@@ -1,19 +1,22 @@
 import type { Context, Hono } from 'hono';
 import { slugify } from '../../../domain/slug.js';
 import { llmOf } from '../../../services/resolver.js';
-import { createProtocol, getProtocolBySlug, getPublished, listProtocols } from '../../protocols/repo.js';
-import { createManualDraft } from '../../protocols/service.js';
+import { createProtocol, getProtocol, getProtocolBySlug, getPublished, listProtocols } from '../../protocols/repo.js';
+import { createManualDraft, runDraft } from '../../protocols/service.js';
 import { StepShell } from './StepShell.js';
 import { Field, destination, goOf, str, type Errors, type SetupContext, type Status } from './shared.js';
 
 type Values = { title: string; tags: string; urls: string };
+/** A protocol whose draft from sources failed: shown with Try again and Write it yourself. */
+type Failed = { id: number; urls: string; message: string };
+const reviewUrl = (protocolId: number, versionId: number) => `/admin/protocols/${protocolId}/versions/${versionId}?from=setup`;
 const EMPTY: Values = { title: '', tags: '', urls: '' };
 
 /** Step 6: create a protocol, then draft it from sources or write it yourself. */
 export function registerProtocolStep(app: Hono, ctx: SetupContext): void {
   const { deps, db, render, doneSteps, now } = ctx;
 
-  const protocolPage = (c: Context, values: Values = EMPTY, errors: Errors = {}, status: Status = 200) => {
+  const protocolPage = (c: Context, values: Values = EMPTY, errors: Errors = {}, status: Status = 200, failed?: Failed, noLlmAlert = false) => {
     const hasLlm = llmOf(deps) !== undefined;
     const published = getPublished(db);
     const inProgress = listProtocols(db).filter((p) => p.publishedVersion === null);
@@ -46,6 +49,39 @@ export function registerProtocolStep(app: Hono, ctx: SetupContext): void {
                   {inProgress.map((p) => (
                     <li>
                       <a href={`/admin/protocols/${p.id}?from=setup`}>{p.title}</a> ({p.latestStatus ?? 'no draft yet'})
+                      {failed?.id === p.id && (
+                        <>
+                          <form method="post" action={`/admin/setup/protocol/${p.id}/draft`} class="admin-form" data-busy="Drafting from your sources…">
+                            <Field
+                              id="retry_source_urls"
+                              label="Source URLs (one per line)"
+                              error={failed.message}
+                              control={(describedBy, invalid) => (
+                                <textarea
+                                  id="retry_source_urls"
+                                  name="source_urls"
+                                  rows={4}
+                                  disabled={!hasLlm}
+                                  aria-describedby={describedBy}
+                                  aria-invalid={invalid ? 'true' : undefined}
+                                  autofocus
+                                >
+                                  {failed.urls}
+                                </textarea>
+                              )}
+                            />
+                            <button type="submit" disabled={!hasLlm}>
+                              Try again
+                            </button>
+                          </form>
+                          <form method="post" action={`/admin/protocols/${p.id}/manual-draft`}>
+                            <input type="hidden" name="from" value="setup" />
+                            <button type="submit" class="btn-secondary">
+                              Write it yourself
+                            </button>
+                          </form>
+                        </>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -85,7 +121,7 @@ export function registerProtocolStep(app: Hono, ctx: SetupContext): void {
                 {hasLlm ? (
                   <p>Paste web pages (one per line) and we will draft a protocol from them. You review it before it is published.</p>
                 ) : (
-                  <p class="muted">
+                  <p class="muted" id="no-llm-note" role={noLlmAlert ? 'alert' : undefined}>
                     Add an Anthropic key in <a href="/admin/setup/services">Setup → Services</a> to draft protocols from sources — or
                     write one yourself.
                   </p>
@@ -99,7 +135,14 @@ export function registerProtocolStep(app: Hono, ctx: SetupContext): void {
                     </textarea>
                   )}
                 />
-                <button type="submit" name="path" value="sources" class="btn-secondary" disabled={!hasLlm}>
+                <button
+                  type="submit"
+                  name="path"
+                  value="sources"
+                  class="btn-secondary"
+                  disabled={!hasLlm}
+                  aria-describedby={hasLlm ? undefined : 'no-llm-note'}
+                >
                   Draft from sources
                 </button>
               </form>
@@ -129,12 +172,27 @@ export function registerProtocolStep(app: Hono, ctx: SetupContext): void {
       return protocolPage(c, values, { title: `You already have a protocol called "${title}". Pick a different title.` }, 400);
     }
     const tags = [...new Set(tagsRaw.split(',').map((t) => t.trim()).filter((t) => t !== ''))];
+    const path = str(body['path']);
+    // A forged sources request with no key is refused before anything is created (no orphan protocol).
+    if (path === 'sources' && llmOf(deps) === undefined) return protocolPage(c, values, {}, 503, undefined, true);
     const protocol = createProtocol(db, { slug, title, tags });
-    if (str(body['path']) === 'sources') {
-      // Same form body replayed against the classic draft route (307 keeps POST); its `from=setup` field brings us back.
-      return c.redirect(`/admin/protocols/${protocol.id}/draft`, 307);
-    }
+    if (path === 'sources') return draftFromSources(c, protocol.id, values.urls);
     const version = createManualDraft(db, protocol.id, now());
-    return c.redirect(`/admin/protocols/${protocol.id}/versions/${version.id}?from=setup`, 302);
+    return c.redirect(reviewUrl(protocol.id, version.id), 302);
+  });
+
+  /** Drafts from sources in-process; success goes to review, failure re-renders this step with a retry. */
+  const draftFromSources = async (c: Context, protocolId: number, urls: string) => {
+    const result = await runDraft(db, deps, protocolId, urls);
+    if (result.ok) return c.redirect(reviewUrl(protocolId, result.version.id), 302);
+    if (result.reason === 'not_found') return c.notFound();
+    return protocolPage(c, EMPTY, {}, result.status, { id: protocolId, urls, message: result.plain }, result.reason === 'no_llm');
+  };
+
+  app.post('/protocol/:id/draft', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!getProtocol(db, id)) return c.notFound();
+    const body = await c.req.parseBody();
+    return draftFromSources(c, id, str(body['source_urls']));
   });
 }

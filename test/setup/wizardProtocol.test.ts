@@ -22,7 +22,7 @@ beforeAll(async () => {
   HASH = await hashPassword(PW);
 });
 
-async function harness(opts: { llm?: boolean } = {}) {
+async function harness(opts: { llm?: boolean; llmOverride?: { generateJson: () => Promise<never> } } = {}) {
   const db = createTestDb();
   const env = loadEnv({ SESSION_SECRET: 's'.repeat(32), ADMIN_PASSWORD_HASH: HASH });
   const secrets = createSecretsStore(db, env);
@@ -34,7 +34,7 @@ async function harness(opts: { llm?: boolean } = {}) {
     scheduler: { reschedule: vi.fn() },
     ...(opts.llm
       ? {
-          llm: fixtureProvider(path.resolve(import.meta.dirname, '../fixtures/llm')),
+          llm: (opts.llmOverride as never) ?? fixtureProvider(path.resolve(import.meta.dirname, '../fixtures/llm')),
           siteFetch: fakeSiteFetch(path.resolve(import.meta.dirname, '../fixtures/web')),
           lookup: async () => [{ address: '93.184.216.34', family: 4 as const }],
         }
@@ -73,25 +73,51 @@ describe('protocol step', () => {
     expect(html).toContain('data-busy');
   });
 
-  it('with a key the sources path replays to the draft route (307) and returns to review', async () => {
-    const { db, app, cookie, post } = await harness({ llm: true });
-    const start = await post('/admin/setup/protocol/start', {
-      title: 'Choking (adult)',
-      source_urls: RC,
-      path: 'sources',
-      from: 'setup',
-    });
-    expect(start.status).toBe(307);
+  it('with a key the sources path drafts directly and lands on review with the setup link', async () => {
+    const { db, post } = await harness({ llm: true });
+    const res = await post('/admin/setup/protocol/start', { title: 'Choking (adult)', source_urls: RC, path: 'sources' });
+    expect(res.status).toBe(302);
     const p = listProtocols(db)[0]!;
-    expect(start.headers.get('location')).toBe(`/admin/protocols/${p.id}/draft`);
-    const replay = await app.request(start.headers.get('location')!, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie },
-      body: new URLSearchParams({ source_urls: RC, from: 'setup' }).toString(),
-    });
-    expect(replay.status).toBe(302);
     const v = listVersions(db, p.id)[0]!;
-    expect(replay.headers.get('location')).toBe(`/admin/protocols/${p.id}/versions/${v.id}?from=setup`);
+    expect(res.headers.get('location')).toBe(`/admin/protocols/${p.id}/versions/${v.id}?from=setup`);
+  });
+
+  it('a failed draft re-renders the wizard with a plain error, retry and manual options, and retry reuses the protocol', async () => {
+    const llm = { generateJson: async () => { throw new Error('upstream said: sk-secret-123 rate limited'); } };
+    const { db, post } = await harness({ llm: true, llmOverride: llm });
+    const res = await post('/admin/setup/protocol/start', { title: 'Choking (adult)', source_urls: RC, path: 'sources' });
+    expect(res.status).toBe(502);
+    const html = await res.text();
+    expect(html).toContain('Draft rejected');
+    expect(html).not.toContain('sk-secret-123');
+    expect(html).toContain('id="source_urls"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('Try again');
+    expect(html).toContain('Write it yourself');
+    expect(html).toContain('In progress');
+    expect(html).toContain('redcross.example/choking');
+    expect(listProtocols(db)).toHaveLength(1);
+    const p = listProtocols(db)[0]!;
+    expect(html).toContain(`/admin/setup/protocol/${p.id}/draft`);
+    expect(html).toContain(`/admin/protocols/${p.id}/manual-draft`);
+    const retry = await post(`/admin/setup/protocol/${p.id}/draft`, { source_urls: RC });
+    expect(retry.status).toBe(502);
+    expect(listProtocols(db)).toHaveLength(1);
+  });
+
+  it('forged sources path without a key is a 503 in the wizard and creates nothing', async () => {
+    const { db, post } = await harness();
+    const res = await post('/admin/setup/protocol/start', { title: 'Choking (adult)', source_urls: RC, path: 'sources' });
+    expect(res.status).toBe(503);
+    expect(await res.text()).toContain('Add an Anthropic key in');
+    expect(listProtocols(db)).toHaveLength(0);
+  });
+
+  it('disabled Draft from sources points at its explanation', async () => {
+    const { get } = await harness();
+    const html = await (await get('/admin/setup/protocol')).text();
+    expect(html).toMatch(/<button[^>]*aria-describedby="no-llm-note"[^>]*disabled|<button[^>]*disabled[^>]*aria-describedby="no-llm-note"/);
+    expect(html).toContain('id="no-llm-note"');
   });
 
   it('rejects a blank or duplicate title with a field error', async () => {

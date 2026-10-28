@@ -3,7 +3,6 @@ import { raw } from 'hono/html';
 import type { Child } from 'hono/jsx';
 import type { AppDeps } from '../../app.js';
 import { slugify } from '../../domain/slug.js';
-import { LlmRefusalError, LlmValidationError } from '../../services/llm/provider.js';
 import { llmOf } from '../../services/resolver.js';
 import { WarningBadge } from '../../web/components/WarningBadge.js';
 import { renderMarkdown, safeHref } from '../../web/format.js';
@@ -20,10 +19,10 @@ import {
 import {
   ProtocolError,
   createManualDraft,
-  generateDraft,
   parseAllowlist,
   publishVersion,
   rejectVersion,
+  runDraft,
   submitForReview,
   updateDraftBody,
 } from './service.js';
@@ -31,6 +30,8 @@ import {
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 /** Only the wizard may ask for the "Back to setup" link; any other value is ignored. */
 const fromSetup = (v: unknown): boolean => v === 'setup';
+/** The query suffix that keeps the wizard link alive across pages. */
+const setupQs = (on: boolean | undefined): string => (on ? '?from=setup' : '');
 const NO_LLM: Child = (
   <>
     Add an Anthropic key in <a href="/admin/setup/services">Setup → Services</a> to draft protocols from sources — or write one
@@ -85,7 +86,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
   const detailPage = (
     c: Parameters<typeof page>[0],
     id: number,
-    opts: { error?: Child; status?: 200 | 400 | 404 | 502 | 503; urls?: string; setup?: boolean } = {},
+    opts: { error?: Child; status?: 200 | 400 | 404 | 502 | 503; urls?: string; setup?: boolean; noLlmAlert?: boolean } = {},
   ) => {
     const protocol = getProtocol(db, id);
     if (!protocol) return c.notFound();
@@ -134,7 +135,11 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
           </button>
         </form>
         <h2>Generate draft</h2>
-        {!hasLlm && !opts.error && <p class="muted">{NO_LLM}</p>}
+        {!hasLlm && (
+          <p class="muted" id="no-llm-note" role={opts.noLlmAlert ? 'alert' : undefined}>
+            {NO_LLM}
+          </p>
+        )}
         {allowlist.length > 0 && <p class="muted">Allowed source hosts: {allowlist.join(', ')}</p>}
         <form id="draft" method="post" action={`/admin/protocols/${id}/draft`}>
           {opts.setup && <input type="hidden" name="from" value="setup" />}
@@ -146,7 +151,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
               </textarea>
             </label>
           </p>
-          <button type="submit" disabled={!hasLlm}>
+          <button type="submit" disabled={!hasLlm} aria-describedby={hasLlm ? undefined : 'no-llm-note'}>
             Generate draft
           </button>
         </form>
@@ -206,24 +211,24 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         {open && (
           <>
             <h2>Edit</h2>
-            <form method="post" action={`${base}/body${opts.setup ? "?from=setup" : ""}`}>
+            <form method="post" action={`${base}/body${setupQs(opts.setup)}`}>
               <textarea name="body_md" rows={20}>
                 {opts.bodyMd ?? version.bodyMd}
               </textarea>
               <button type="submit">Save</button>
             </form>
             {version.status === 'draft' && (
-              <form method="post" action={`${base}/submit${opts.setup ? "?from=setup" : ""}`}>
+              <form method="post" action={`${base}/submit${setupQs(opts.setup)}`}>
                 <button type="submit">Submit for review</button>
               </form>
             )}
-            <form method="post" action={`${base}/publish${opts.setup ? "?from=setup" : ""}`}>
+            <form method="post" action={`${base}/publish${setupQs(opts.setup)}`}>
               <label>
                 Notes <input name="notes" />
               </label>
               <button type="submit">Approve &amp; publish</button>
             </form>
-            <form method="post" action={`${base}/reject${opts.setup ? "?from=setup" : ""}`}>
+            <form method="post" action={`${base}/reject${setupQs(opts.setup)}`}>
               <label>
                 Notes <input name="notes" required />
               </label>
@@ -232,7 +237,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
           </>
         )}
         <p>
-          <a href={`/admin/protocols/${protocolId}`}>Back to protocol</a>
+          <a href={`/admin/protocols/${protocolId}${setupQs(opts.setup)}`}>Back to protocol</a>
         </p>
         {opts.setup && <BackToSetup />}
       </>,
@@ -265,7 +270,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
         throw e;
       }
       return c.redirect(
-        `/admin/protocols/${protocolId}/versions/${versionId}${fromSetup(c.req.query('from')) ? '?from=setup' : ''}`,
+        `/admin/protocols/${protocolId}/versions/${versionId}${setupQs(fromSetup(c.req.query('from')))}`,
         302,
       );
     };
@@ -363,53 +368,18 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
     const body = await c.req.parseBody();
     const urls = str(body['source_urls']);
     const setup = fromSetup(body['from']);
-    const llm = llmOf(deps);
-    if (!llm) {
+    const result = await runDraft(db, deps, id, urls);
+    if (!result.ok) {
+      if (result.reason === 'not_found') return c.notFound();
       return detailPage(c, id, {
-        error: NO_LLM,
-        setup,
-        status: 503,
+        ...(result.reason === 'no_llm' ? { noLlmAlert: true } : { error: result.message }),
+        status: result.status,
         urls,
+        setup,
       });
-    }
-    try {
-      await generateDraft(db, id, urls.split(/\r?\n/), {
-        llm,
-        fetch: deps.siteFetch ?? globalThis.fetch,
-        model: deps.env.LLM_DRAFT_MODEL,
-        allowlist,
-        now,
-        log: console,
-        ...(deps.lookup ? { lookup: deps.lookup } : {}),
-      });
-    } catch (e) {
-      if (e instanceof ProtocolError) {
-        if (e.code === 'not_found') return c.notFound();
-        return detailPage(c, id, {
-          error: e.detail ? `${e.message}: ${e.detail}` : e.message,
-          status: 400,
-          urls,
-          setup,
-        });
-      }
-      if (e instanceof LlmValidationError || e instanceof LlmRefusalError) {
-        const reason = e instanceof LlmRefusalError ? e.message : e.message.split(': ')[0];
-        return detailPage(c, id, { error: `Draft rejected: ${reason}`, status: 502, urls, setup });
-      }
-      if (e instanceof Error) {
-        // Provider failures (rate limit, 5xx, auth, network). The SDK never echoes the key in messages.
-        console.error(`LLM draft failed for protocol ${id}: ${e.message}`);
-        return detailPage(c, id, {
-          error: `Draft rejected: LLM provider error: ${e.message.slice(0, 200)}`,
-          status: 502,
-          urls,
-          setup,
-        });
-      }
-      throw e;
     }
     const latest = listVersions(db, id)[0];
-    if (setup && latest) return c.redirect(`/admin/protocols/${id}/versions/${latest.id}?from=setup`, 302);
+    if (setup && latest) return c.redirect(`/admin/protocols/${id}/versions/${latest.id}${setupQs(true)}`, 302);
     return c.redirect(`/admin/protocols/${id}`, 302);
   });
 
@@ -424,7 +394,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
       throw e;
     }
     return c.redirect(
-      `/admin/protocols/${id}/versions/${version.id}${fromSetup(body['from']) ? '?from=setup' : ''}`,
+      `/admin/protocols/${id}/versions/${version.id}${setupQs(fromSetup(body['from']))}`,
       302,
     );
   });

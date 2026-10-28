@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
+import type { AppDeps } from '../../app.js';
 import type { Db, DbOrTx } from '../../db/client.js';
 import type { Logger, ProtocolStatus } from '../../domain/types.js';
 import { SOP_HEADINGS, assertSopHeadings, draftProtocol } from '../../services/llm/draft.js';
-import { LlmValidationError, type LlmProvider } from '../../services/llm/provider.js';
+import { LlmRefusalError, LlmValidationError, type LlmProvider } from '../../services/llm/provider.js';
+import { llmOf } from '../../services/resolver.js';
 import { fetchPage, type LookupFn } from '../../services/llm/web.js';
 import {
   getProtocol,
@@ -119,6 +121,60 @@ export async function generateDraft(
     );
     return version;
   });
+}
+
+export type RunDraftResult =
+  | { ok: true; version: ProtocolVersion }
+  | { ok: false; status: 400 | 502 | 503; reason: 'not_found' | 'no_llm' | 'invalid' | 'rejected'; message: string; plain: string };
+
+/**
+ * The whole "draft from sources" flow for the classic route and the wizard: resolves the LLM, parses and checks
+ * the URLs, fetches, drafts and stores the version, and turns every expected failure into a status plus plain
+ * words (never raw upstream bodies or keys).
+ */
+export async function runDraft(
+  db: Db,
+  deps: AppDeps,
+  protocolId: number,
+  sourceUrlsText: string,
+): Promise<RunDraftResult> {
+  const llm = llmOf(deps);
+  if (!llm) return { ok: false, status: 503, reason: 'no_llm', message: 'No Anthropic key is configured', plain: 'No Anthropic key is configured' };
+  try {
+    const version = await generateDraft(db, protocolId, sourceUrlsText.split(/\r?\n/), {
+      llm,
+      fetch: deps.siteFetch ?? globalThis.fetch,
+      model: deps.env.LLM_DRAFT_MODEL,
+      allowlist: parseAllowlist(deps.env.PROTOCOL_SOURCE_ALLOWLIST),
+      now: deps.now ?? (() => new Date()),
+      log: console,
+      ...(deps.lookup ? { lookup: deps.lookup } : {}),
+    });
+    return { ok: true, version };
+  } catch (e) {
+    if (e instanceof ProtocolError) {
+      if (e.code === 'not_found') return { ok: false, status: 400, reason: 'not_found', message: e.message, plain: e.message };
+      const message = e.detail ? `${e.message}: ${e.detail}` : e.message;
+      return { ok: false, status: 400, reason: 'invalid', message, plain: message };
+    }
+    if (e instanceof LlmValidationError || e instanceof LlmRefusalError) {
+      const reason = e instanceof LlmRefusalError ? e.message : e.message.split(': ')[0];
+      const message = `Draft rejected: ${reason}`;
+      return { ok: false, status: 502, reason: 'rejected', message, plain: message };
+    }
+    if (e instanceof Error) {
+      // Provider failures (rate limit, 5xx, auth, network). The SDK never echoes the key in messages.
+      console.error(`LLM draft failed for protocol ${protocolId}: ${e.message}`);
+      return {
+        ok: false,
+        status: 502,
+        reason: 'rejected',
+        message: `Draft rejected: LLM provider error: ${e.message.slice(0, 200)}`,
+        plain: 'Draft rejected: the AI service had a problem. Try again in a minute, or write it yourself.',
+      };
+    }
+    throw e;
+  }
 }
 
 export const MANUAL_TEMPLATE =
