@@ -134,7 +134,7 @@ describe('GET /admin/places/find', () => {
     seed(dentist, { name: 'A', status: 'approved' });
     seed(dentist, { name: 'B', status: 'warn' });
     const { get } = await harness();
-    expect(await (await get(URL_)).text()).toContain('Overnight · 2 of 3 on family site');
+    expect(await (await get(URL_)).text()).toContain('Overnight · 2 on family site');
   });
 
   it('while a run is going: the progress card, a 3 second refresh, and no picker', async () => {
@@ -338,15 +338,12 @@ describe('POST /admin/places/find/:categoryId/picks', () => {
     expect(sec).toContain('<div class="change" data-summary="true" aria-live="polite" hidden="">');
   });
 
-  it('more than 3 re-renders that section with the error and the submitted checks, saving nothing', async () => {
+  it('more than 3 picks is fine: all of them go on the family site', async () => {
     const rows = ['A', 'B', 'C', 'D'].map((name, i) => seed(dentist, { name, rank: i + 1, verdict: i < 3 ? 'pick' : 'backup' }));
     const { post } = await harness();
     const res = await post(`${URL_}/${dentist.id}/picks`, { location_id: rows.map(String) });
-    expect(res.status).toBe(400);
-    const sec = sectionOf(await res.text(), 'test-dentist');
-    expect(sec).toContain('<div class="change err" role="alert" data-summary="true">Pick at most 3 places. You checked 4.</div>');
-    expect(sec.match(/name="location_id" value="\d+" checked=""/g)).toHaveLength(4);
-    expect(rows.map(statusOf)).toEqual(['candidate', 'candidate', 'candidate', 'candidate']);
+    expect(res.status).toBe(302);
+    expect(rows.map(statusOf)).toEqual(['approved', 'approved', 'approved', 'approved']);
   });
 
   it('none checked is a 400 too; a place from another category is refused', async () => {

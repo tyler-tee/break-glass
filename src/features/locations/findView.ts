@@ -49,13 +49,12 @@ export function changeSummary(rows: RankedRow[], checked: ReadonlySet<number>, n
   const adds = rows.filter((r) => checked.has(r.id) && !r.currentPick).map((r) => names.get(r.id)!);
   const removes = rows.filter((r) => r.currentPick && !checked.has(r.id)).map((r) => names.get(r.id)!);
   const changed = adds.length > 0 || removes.length > 0;
-  if (count === 0) return { text: `Pick up to ${PICKS_PER_CATEGORY} places.`, error: true, changed, count };
+  if (count === 0) return { text: 'Pick at least 1 place.', error: true, changed, count };
   if (!changed) return { text: 'Same as what the family site shows now.', error: false, changed, count };
   const parts: string[] = [];
   if (adds.length) parts.push(`adds ${listWords(adds)}`);
   if (removes.length) parts.push(`takes off ${listWords(removes)}`);
   let text = `Saving ${parts.join(' and ')}.`;
-  if (count < PICKS_PER_CATEGORY) text += ` You have ${count} of ${PICKS_PER_CATEGORY} picked.`;
   return { text, error: false, changed, count };
 }
 

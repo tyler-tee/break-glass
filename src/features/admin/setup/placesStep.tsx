@@ -37,7 +37,7 @@ export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
         nextSecondary={!allPicked}
         intro={
           <p>
-            Pick the places your family would actually go to, {PICKS_PER_CATEGORY} per category. Only the places you save
+            Pick the places your family would actually go to; the top {PICKS_PER_CATEGORY} in each category come pre-picked. Only the places you save
             show up on the family site.
           </p>
         }
@@ -67,7 +67,7 @@ export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
                       <li>
                         <span>{cat.name}</span>
                         <span class={n === 0 ? 'warn' : 'muted'}>
-                          {n === 0 ? 'No picks yet' : `${n} of ${PICKS_PER_CATEGORY} picked`}
+                          {n === 0 ? 'No picks yet' : `${n} picked`}
                         </span>
                       </li>
                     );

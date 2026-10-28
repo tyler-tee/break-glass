@@ -67,7 +67,7 @@ describe('savePicks', () => {
     expect(statusOf(a)).toBe('candidate');
   });
 
-  it('refuses more than three picks, places from another category, rejected places and unknown categories', () => {
+  it('refuses places from another category, rejected places and unknown categories', () => {
     const ids = [add({ name: '1' }), add({ name: '2' }), add({ name: '3' }), add({ name: '4' })];
     const kept = add({ name: 'Kept', status: 'approved' });
     const expectInvalid = (fn: () => unknown, message: RegExp) => {
@@ -80,7 +80,6 @@ describe('savePicks', () => {
       expect(err).toBeInstanceOf(LocationError);
       expect((err as LocationError).message).toMatch(message);
     };
-    expectInvalid(() => savePicks(db, categoryId, ids, now), /at most 3/);
 
     const other = createCategory(db, { name: 'Urgent care', searchTerms: ['urgent care'] }).id;
     const elsewhere = db
@@ -98,6 +97,12 @@ describe('savePicks', () => {
     // Nothing changed.
     expect(ids.map(statusOf)).toEqual(['candidate', 'candidate', 'candidate', 'candidate']);
     expect(statusOf(kept)).toBe('approved');
+  });
+
+  it('has no cap: more than three picks all go on the family site', () => {
+    const ids = [add({ name: '1' }), add({ name: '2' }), add({ name: '3' }), add({ name: '4' })];
+    expect(savePicks(db, categoryId, ids, now).added).toEqual(ids);
+    expect(ids.map(statusOf)).toEqual(['approved', 'approved', 'approved', 'approved']);
   });
 
   it('a new pick shows up for the family, and a demoted one disappears', async () => {

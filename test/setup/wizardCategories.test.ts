@@ -233,7 +233,7 @@ describe('places step without a key', () => {
     }
     const html = await (await get('/admin/setup/places')).text();
     expect(html).toContain('1 of 2 categories have picks.');
-    expect(html).toContain('2 of 3 picked');
+    expect(html).toContain('2 picked');
     expect(html).toContain('No picks yet');
   });
 

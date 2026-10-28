@@ -1,7 +1,6 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import { locations } from '../../db/schema.js';
-import { PICKS_PER_CATEGORY } from '../../domain/ranking.js';
 import type { Logger } from '../../domain/types.js';
 import type { Extractor } from '../../services/llm/extract.js';
 import { getCategory } from '../categories/repo.js';
@@ -30,9 +29,6 @@ export function savePicks(
 ): SavePicksResult {
   if (!getCategory(db, categoryId)) throw new LocationError('not_found', 'Category not found');
   const ids = [...new Set(locationIds)];
-  if (ids.length > PICKS_PER_CATEGORY) {
-    throw new LocationError('invalid', `Pick at most ${PICKS_PER_CATEGORY} places`);
-  }
   const rows = db.select().from(locations).where(eq(locations.categoryId, categoryId)).all();
   const byId = new Map(rows.map((r) => [r.id, r]));
   for (const id of ids) {

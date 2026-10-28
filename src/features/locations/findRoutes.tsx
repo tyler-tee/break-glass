@@ -83,7 +83,7 @@ const ChevronRight: FC = () => (
 const needWord = (need: HoursNeed): string => (need === 'daytime' ? 'Daytime' : 'Overnight');
 
 const onSiteText = (n: number): string =>
-  n === 0 ? 'none on family site yet' : n >= PICKS_PER_CATEGORY ? `${n} on family site` : `${n} of ${PICKS_PER_CATEGORY} on family site`;
+  n === 0 ? 'none on family site yet' : `${n} on family site`;
 
 const savedText = (n: number): string =>
   n === 0 ? 'Saved. Nothing from this category shows on the family site now.' : `Saved. The family site now shows ${n === 1 ? 'this one' : `these ${n}`}.`;
@@ -158,7 +158,7 @@ export function findPlacesRoutes(deps: ResolvedAppDeps): Hono {
         <p class="lede">
           {running
             ? 'Searching and ranking. Finished categories are saved as they land, so you can leave this page and come back.'
-            : "Pick categories and we'll search Google, then rank what comes back on three things: is it open when you'd need it, is it any good, and how far is it. You keep 3 per category. Nothing reaches the family site until you save."}
+            : "Pick categories and we'll search Google, then rank what comes back on three things: is it open when you'd need it, is it any good, and how far is it. The top 3 in each category come pre-picked; pick more or fewer as you like. Nothing reaches the family site until you save."}
         </p>
       </div>
     );
@@ -269,7 +269,7 @@ export function findPlacesRoutes(deps: ResolvedAppDeps): Hono {
             <h2 id="empty-h">Nothing ranked yet</h2>
             <p>
               Choose categories above and press Find &amp; rank. Each category then gets its own section here: a ranked
-              list with hours, reviews and distance side by side, where you keep 3.
+              list with hours, reviews and distance side by side, where you choose what goes on the family site.
             </p>
           </section>
         )}
@@ -351,8 +351,7 @@ export function findPlacesRoutes(deps: ResolvedAppDeps): Hono {
     const body = await c.req.parseBody({ all: true });
     const chosen = [...new Set(ids(body['location_id']))];
     const fail = (message: string) => render(c, { status: 400, pickError: { categoryId: category.id, checked: new Set(chosen), message } });
-    if (chosen.length === 0) return fail(`Pick at least 1 place to save, up to ${PICKS_PER_CATEGORY}.`);
-    if (chosen.length > PICKS_PER_CATEGORY) return fail(`Pick at most ${PICKS_PER_CATEGORY} places. You checked ${chosen.length}.`);
+    if (chosen.length === 0) return fail('Pick at least 1 place to save.');
     try {
       const extract = extractOf(deps);
       savePicks(db, category.id, chosen, now(), extract ? { extract } : {});
@@ -420,7 +419,7 @@ const Picker: FC<{ cats: Category[]; onSite: Map<number, number>; hasLlm: boolea
                 <input type="checkbox" name="category_id" value={String(cat.id)} checked />
                 <span>
                   <span class="n">{cat.name}</span>
-                  <span class={n < PICKS_PER_CATEGORY ? 's warn' : 's'}>
+                  <span class={n === 0 ? 's warn' : 's'}>
                     {needWord(cat.hoursNeed)} · {onSiteText(n)}
                   </span>
                 </span>
@@ -669,7 +668,7 @@ const Section: FC<{
 
   return (
     <section class="card sec" id={cat.slug} aria-labelledby={`${cat.slug}-h`}>
-      <form method="post" action={`${BASE}/${cat.id}/picks`} id={formId} class="picks" data-picks data-max={String(PICKS_PER_CATEGORY)}>
+      <form method="post" action={`${BASE}/${cat.id}/picks`} id={formId} class="picks" data-picks>
         <div class="sec-head">
           <div>
             <h2 id={`${cat.slug}-h`}>{cat.name}</h2>

@@ -67,9 +67,8 @@
     update();
   });
 
-  // Find places: one form per category. At most data-max picks, and the summary and save label follow the boxes.
+  // Find places: one form per category. The summary and save label follow the boxes.
   each(document.querySelectorAll('form[data-picks]'), function (form) {
-    var max = Number(form.getAttribute('data-max')) || 3;
     var boxes = form.querySelectorAll('input[name="location_id"]');
     var summary = form.querySelector('[data-summary]');
     var saves = form.querySelectorAll('[data-save]');
@@ -85,24 +84,22 @@
         if (!b.checked && current) removes.push(name);
       });
       var isChanged = adds.length > 0 || removes.length > 0;
-      each(boxes, function (b) { b.disabled = !b.checked && count >= max; });
 
       var label = isChanged ? 'Save ' + count + ' pick' + (count === 1 ? '' : 's') : 'No changes';
       each(saves, function (s) {
         s.textContent = label;
-        s.disabled = !isChanged || count === 0 || count > max;
+        s.disabled = !isChanged || count === 0;
       });
       if (!fromUser || !summary) return;
 
       var text, err = false;
-      if (count === 0) { text = 'Pick up to ' + max + ' places.'; err = true; }
+      if (count === 0) { text = 'Pick at least 1 place.'; err = true; }
       else if (!isChanged) text = 'Same as what the family site shows now.';
       else {
         var parts = [];
         if (adds.length) parts.push('adds ' + words(adds));
         if (removes.length) parts.push('takes off ' + words(removes));
         text = 'Saving ' + parts.join(' and ') + '.';
-        if (count < max) text += ' You have ' + count + ' of ' + max + ' picked.';
       }
       summary.textContent = text;
       summary.className = err ? 'change err' : 'change';
