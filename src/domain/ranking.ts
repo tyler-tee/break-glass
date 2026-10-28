@@ -1,5 +1,8 @@
 import type { LatLng } from './types.js';
 
+/** Every category shows this many picks. */
+export const PICKS_PER_CATEGORY = 3;
+
 const EARTH_RADIUS_MI = 3958.8;
 const toRad = (deg: number): number => (deg * Math.PI) / 180;
 

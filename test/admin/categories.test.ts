@@ -52,6 +52,32 @@ describe('admin categories', () => {
     expect(getCategoryBySlug(db, 'pharmacy')?.searchTerms).toEqual(['pharmacy', '24 hour pharmacy']);
   });
 
+  it('create stores hours need and defaults to overnight', async () => {
+    await post('/admin/categories', 'name=Clinic&search_terms=clinic&hours_need=daytime');
+    expect(getCategoryBySlug(db, 'clinic')?.hoursNeed).toBe('daytime');
+    await post('/admin/categories', 'name=Pharmacy&search_terms=pharmacy');
+    expect(getCategoryBySlug(db, 'pharmacy')?.hoursNeed).toBe('overnight');
+  });
+
+  it('invalid hours need → 400', async () => {
+    const res = await post('/admin/categories', 'name=Clinic&search_terms=clinic&hours_need=sometimes');
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('when you would go');
+    expect(getCategoryBySlug(db, 'clinic')).toBeNull();
+  });
+
+  it('edit form shows the When would you go? field with the saved choice', async () => {
+    const html = await (await app.request(`/admin/categories/${idOf('urgent-care')}/edit`, { headers: { cookie } })).text();
+    expect(html).toContain('When would you go?');
+    expect(html).toContain('name="hours_need"');
+    expect(html).toContain('Any time, including overnight');
+    expect(html).toMatch(/<option value="daytime" selected[^>]*>/);
+    expect(html).not.toContain('Target count');
+    const res = await post(`/admin/categories/${idOf('urgent-care')}`, 'name=Urgent+care&search_terms=urgent+care&hours_need=overnight');
+    expect(res.status).toBe(302);
+    expect(getCategoryBySlug(db, 'urgent-care')?.hoursNeed).toBe('overnight');
+  });
+
   it('duplicate name → 400', async () => {
     const res = await post('/admin/categories', 'name=Dentist&search_terms=dentist');
     expect(res.status).toBe(400);

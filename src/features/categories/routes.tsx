@@ -7,14 +7,16 @@ import { BudgetExhausted, newPlacesBudget } from '../../services/places/budget.j
 import { PlacesError } from '../../services/places/client.js';
 import { extractOf, placesOf } from '../../services/resolver.js';
 import { NoHomeLocation, runDiscovery } from '../locations/discovery.js';
+import type { HoursNeed } from '../../domain/types.js';
 import { CategoryError, createCategory, deleteCategory, getCategory, listCategories, updateCategory } from './repo.js';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const parseTerms = (v: unknown): string[] => str(v).split(/[\n\r,]+/);
-// Blank target count means "use the default"; anything else must parse as a number.
-const parseTarget = (v: unknown): number | undefined => (str(v).trim() === '' ? undefined : Number(str(v)));
+// Blank means "use the default"; anything else is validated in the repo.
+const hoursNeedOf = (v: unknown): { hoursNeed?: HoursNeed } =>
+  str(v).trim() === '' ? {} : { hoursNeed: str(v) as HoursNeed };
 
-type FormValues = { name: string; searchTerms: string; targetCount: string };
+type FormValues = { name: string; searchTerms: string; hoursNeed: string };
 
 export function categoriesRoutes(deps: AppDeps): Hono {
   const { db } = deps;
@@ -36,7 +38,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
               <th>Name</th>
               <th>Slug</th>
               <th>Search terms</th>
-              <th>Target</th>
+              <th>Hours</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -46,7 +48,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
                 <td>{cat.name}</td>
                 <td>{cat.slug}</td>
                 <td>{cat.searchTerms.join(', ')}</td>
-                <td>{cat.targetCount}</td>
+                <td>{cat.hoursNeed}</td>
                 <td class="row-actions">
                   <a href={`/admin/categories/${cat.id}/edit`}>Edit</a>
                   <form method="post" action={`/admin/categories/${cat.id}/discover`} data-busy="Searching nearby…">
@@ -93,7 +95,15 @@ export function categoriesRoutes(deps: AppDeps): Hono {
           </p>
           <p>
             <label>
-              Target count <input name="target_count" value={v.targetCount} />
+              When would you go?
+              <select name="hours_need">
+                <option value="daytime" selected={v.hoursNeed === 'daytime'}>
+                  Daytime
+                </option>
+                <option value="overnight" selected={v.hoursNeed !== 'daytime'}>
+                  Any time, including overnight
+                </option>
+              </select>
             </label>
           </p>
           <button type="submit">Save</button>
@@ -109,7 +119,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
   const submitted = (body: Record<string, unknown>): FormValues => ({
     name: str(body['name']),
     searchTerms: str(body['search_terms']),
-    targetCount: str(body['target_count']),
+    hoursNeed: str(body['hours_need']),
   });
 
   app.get('/', (c) => listPage(c));
@@ -118,7 +128,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
     formPage(c, '/admin/categories', {
       name: '',
       searchTerms: '',
-      targetCount: '5',
+      hoursNeed: 'overnight',
     }),
   );
 
@@ -128,7 +138,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
     return formPage(c, `/admin/categories/${cat.id}`, {
       name: cat.name,
       searchTerms: cat.searchTerms.join('\n'),
-      targetCount: String(cat.targetCount ?? 5),
+      hoursNeed: cat.hoursNeed,
     });
   });
 
@@ -138,7 +148,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
       createCategory(db, {
         name: str(body['name']),
         searchTerms: parseTerms(body['search_terms']),
-        targetCount: parseTarget(body['target_count']),
+        ...hoursNeedOf(body['hours_need']),
       });
     } catch (e) {
       if (e instanceof CategoryError) {
@@ -216,7 +226,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
       updateCategory(db, id, {
         name: str(body['name']),
         searchTerms: parseTerms(body['search_terms']),
-        targetCount: parseTarget(body['target_count']),
+        ...hoursNeedOf(body['hours_need']),
       });
     } catch (e) {
       if (e instanceof CategoryError) {

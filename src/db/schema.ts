@@ -2,8 +2,13 @@ import { sql } from 'drizzle-orm';
 import { check, index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type {
   BusinessStatus,
+  FindRunProgress,
+  FindRunStatus,
+  HoursNeed,
   LocationStatus,
   ProtocolStatus,
+  RankedBy,
+  RankVerdict,
   TrackedFields,
   WeeklyHours,
 } from '../domain/types.js';
@@ -27,13 +32,18 @@ export const settings = sqliteTable(
   () => [check('settings_single_row', sql`id = 1`)],
 );
 
-export const categories = sqliteTable('categories', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().unique(),
-  searchTerms: text('search_terms', { mode: 'json' }).$type<string[]>().notNull(),
-  targetCount: integer('target_count').default(5),
-});
+export const categories = sqliteTable(
+  'categories',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    name: text('name').notNull(),
+    slug: text('slug').notNull().unique(),
+    searchTerms: text('search_terms', { mode: 'json' }).$type<string[]>().notNull(),
+    // Whether the family would go only in the daytime or at any hour, overnight included.
+    hoursNeed: text('hours_need').$type<HoursNeed>().notNull().default('overnight'),
+  },
+  (t) => [check('categories_hours_need_check', sql`${t.hoursNeed} in ('overnight','daytime')`)],
+);
 
 export const locations = sqliteTable(
   'locations',
@@ -63,6 +73,16 @@ export const locations = sqliteTable(
     status: text('status').$type<LocationStatus>().notNull().default('candidate'),
     lastVerifiedAt: integer('last_verified_at', { mode: 'timestamp_ms' }),
     consecutiveFetchFailures: integer('consecutive_fetch_failures').notNull().default(0),
+    // Ranking result for the category's picks; all null until the location has been ranked.
+    rankVerdict: text('rank_verdict').$type<RankVerdict>(),
+    rankPosition: integer('rank_position'),
+    rankReason: text('rank_reason'),
+    rankFlags: text('rank_flags', { mode: 'json' }).$type<string[]>(),
+    rankedBy: text('ranked_by').$type<RankedBy>(),
+    rankedAt: integer('ranked_at', { mode: 'timestamp_ms' }),
+    shortAddress: text('short_address'),
+    primaryType: text('primary_type'),
+    mapsUri: text('maps_uri'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
@@ -73,6 +93,8 @@ export const locations = sqliteTable(
       'locations_business_status_check',
       sql`${t.businessStatus} is null or ${t.businessStatus} in ('OPERATIONAL','CLOSED_TEMPORARILY','CLOSED_PERMANENTLY')`,
     ),
+    check('locations_rank_verdict_check', sql`${t.rankVerdict} is null or ${t.rankVerdict} in ('pick','backup','avoid')`),
+    check('locations_ranked_by_check', sql`${t.rankedBy} is null or ${t.rankedBy} in ('llm','rules')`),
   ],
 );
 
@@ -163,3 +185,23 @@ export const appSecrets = sqliteTable('app_secrets', {
   value: text('value').notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
+
+// One row per "find places" run; progress is keyed by category id.
+export const findRuns = sqliteTable(
+  'find_runs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
+    finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+    status: text('status').$type<FindRunStatus>().notNull(),
+    categoryIds: text('category_ids', { mode: 'json' }).$type<number[]>().notNull(),
+    progress: text('progress', { mode: 'json' }).$type<FindRunProgress>().notNull(),
+    callsUsed: integer('calls_used').notNull().default(0),
+    llmCalls: integer('llm_calls').notNull().default(0),
+    error: text('error'),
+  },
+  (t) => [check('find_runs_status_check', sql`${t.status} in ('running','done','failed')`)],
+);
+
+export type FindRun = typeof findRuns.$inferSelect;
+export type NewFindRun = typeof findRuns.$inferInsert;

@@ -1,5 +1,6 @@
 import type { Hono, Context } from 'hono';
 import type { Child } from 'hono/jsx';
+import { PICKS_PER_CATEGORY } from '../../../domain/ranking.js';
 import { describePlacesError } from '../../../services/keyProbe.js';
 import { BudgetExhausted, newPlacesBudget } from '../../../services/places/budget.js';
 import { PlacesError } from '../../../services/places/client.js';
@@ -92,7 +93,7 @@ export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
                 <section class="card" id={cat.slug}>
                   <h2>{cat.name}</h2>
                   <p>
-                    {approved.length} approved of target {cat.targetCount ?? 5}
+                    {approved.length} of {PICKS_PER_CATEGORY} picked
                   </p>
                   {approved.length > 0 && <p class="muted">Approved: {approved.map((l) => l.name).join(', ')}</p>}
                   {hasPlaces && (

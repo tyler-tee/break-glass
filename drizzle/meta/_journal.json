@@ -29,6 +29,13 @@
       "when": 1793141456902,
       "tag": "0003_outgoing_zuras",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793194906475,
+      "tag": "0004_wild_thunderbird",
+      "breakpoints": true
     }
   ]
 }

@@ -2,18 +2,18 @@ import { pathToFileURL } from 'node:url';
 import { eq } from 'drizzle-orm';
 import { loadDotEnvFiles } from '../env.js';
 import { haversineMi } from '../domain/ranking.js';
-import type { LatLng, LocationStatus, WeeklyHours } from '../domain/types.js';
+import type { HoursNeed, LatLng, LocationStatus, WeeklyHours } from '../domain/types.js';
 import { openDb, type Db } from './client.js';
 import { runMigrations } from './migrate.js';
 import { categories, locations, settings } from './schema.js';
 
 const DEFAULT_HOME: LatLng = { lat: 40.7608, lng: -111.891 };
 
-const CATEGORIES = [
-  { name: 'Dentist', slug: 'dentist', searchTerms: ['emergency dentist', 'dentist'] },
-  { name: 'Urgent care', slug: 'urgent-care', searchTerms: ['urgent care', 'walk-in clinic'] },
-  { name: 'Emergency room', slug: 'er', searchTerms: ['emergency room', 'hospital emergency department'] },
-  { name: 'Veterinarian', slug: 'vet', searchTerms: ['emergency vet', 'veterinarian'] },
+const CATEGORIES: { name: string; slug: string; searchTerms: string[]; hoursNeed: HoursNeed }[] = [
+  { name: 'Dentist', slug: 'dentist', searchTerms: ['emergency dentist', 'dentist'], hoursNeed: 'overnight' },
+  { name: 'Urgent care', slug: 'urgent-care', searchTerms: ['urgent care', 'walk-in clinic'], hoursNeed: 'daytime' },
+  { name: 'Emergency room', slug: 'er', searchTerms: ['emergency room', 'hospital emergency department'], hoursNeed: 'overnight' },
+  { name: 'Veterinarian', slug: 'vet', searchTerms: ['emergency vet', 'veterinarian'], hoursNeed: 'overnight' },
 ];
 
 const weekdayHours: WeeklyHours = {
@@ -100,7 +100,7 @@ export function seed(db: Db, opts: { home?: LatLng } = {}): void {
 
   for (const c of CATEGORIES) {
     db.insert(categories)
-      .values({ ...c, targetCount: 5 })
+      .values(c)
       .onConflictDoUpdate({
         target: categories.slug,
         set: { name: c.name, searchTerms: c.searchTerms },

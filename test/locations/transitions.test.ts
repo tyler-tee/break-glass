@@ -10,7 +10,9 @@ import { hashPassword } from '../../src/features/admin/auth.js';
 import {
   LocationError,
   approveLocation,
+  canTransition,
   createManualLocation,
+  demoteLocation,
   rejectLocation,
 } from '../../src/features/locations/service.js';
 import { adminLogin } from '../helpers/adminLogin.js';
@@ -95,6 +97,47 @@ describe('status transitions', () => {
     const changes = db.select().from(locationChanges).where(eq(locationChanges.locationId, loc.id)).all();
     expect(changes).toHaveLength(1);
     expect(changes[0]!.resolvedAt).toEqual(now);
+  });
+});
+
+describe('demotion', () => {
+  it('approved → candidate keeps everything else', () => {
+    const loc = fresh();
+    approveLocation(db, loc.id, now);
+    const before = row(loc.id);
+    const later = new Date('2026-10-28T09:00:00Z');
+    const after = demoteLocation(db, loc.id, later);
+    expect(after).toEqual({ ...before, status: 'candidate', updatedAt: later });
+    expect(row(loc.id).lastVerifiedAt).toEqual(now);
+  });
+
+  it('warn → candidate is allowed', () => {
+    const t = new Date();
+    const warn = db
+      .insert(locations)
+      .values({ categoryId: dentistId(), name: 'Warn Dental', status: 'warn', createdAt: t, updatedAt: t })
+      .returning()
+      .get();
+    expect(demoteLocation(db, warn.id, now).status).toBe('candidate');
+  });
+
+  it('candidate and rejected cannot be demoted', () => {
+    const loc = fresh();
+    expect(() => demoteLocation(db, loc.id, now)).toThrow(LocationError);
+    rejectLocation(db, loc.id, now);
+    expect(() => demoteLocation(db, loc.id, now)).toThrow(LocationError);
+    expect(row(loc.id).status).toBe('rejected');
+  });
+
+  it('unknown id is not_found', () => {
+    expect(() => demoteLocation(db, 9999, now)).toThrow(/not found/i);
+  });
+
+  it('only approved and warn can move to candidate', () => {
+    expect(canTransition('approved', 'candidate')).toBe(true);
+    expect(canTransition('warn', 'candidate')).toBe(true);
+    expect(canTransition('candidate', 'candidate')).toBe(false);
+    expect(canTransition('rejected', 'candidate')).toBe(false);
   });
 });
 

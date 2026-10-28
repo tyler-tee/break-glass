@@ -62,6 +62,14 @@ describe('JSON read API', () => {
     expect(body.categories.map((c) => c.name)).toEqual(['Dentist', 'Emergency room', 'Urgent care', 'Veterinarian']);
   });
 
+  it('/api/categories exposes hoursNeed and no targetCount', async () => {
+    const body = (await (await app.request('/api/categories')).json()) as { categories: Record<string, unknown>[] };
+    const urgent = body.categories.find((c) => c.slug === 'urgent-care')!;
+    expect(urgent.hoursNeed).toBe('daytime');
+    expect(body.categories.find((c) => c.slug === 'dentist')!.hoursNeed).toBe('overnight');
+    for (const c of body.categories) expect(c).not.toHaveProperty('targetCount');
+  });
+
   it('/api/locations?category=dentist returns one group', async () => {
     const res = await app.request('/api/locations?category=dentist');
     const body = (await res.json()) as { categories: Group[] };

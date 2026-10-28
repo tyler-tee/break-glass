@@ -47,8 +47,8 @@ export type ManualLocationInput = {
 // Single source of truth for allowed status moves.
 const TRANSITIONS: Record<LocationStatus, LocationStatus[]> = {
   candidate: ['approved', 'rejected'],
-  approved: ['rejected'],
-  warn: ['approved', 'rejected'],
+  approved: ['rejected', 'candidate'],
+  warn: ['approved', 'rejected', 'candidate'],
   rejected: [],
 };
 
@@ -164,4 +164,12 @@ export function rejectLocation(db: Db, id: number, now: Date): Location {
   if (!current) throw new LocationError('not_found', 'Location not found');
   requireTransition(current, 'rejected');
   return updateLocationRow(db, id, { status: 'rejected', updatedAt: now });
+}
+
+/** Demotion when a pick is replaced; everything but the status stays as it is. */
+export function demoteLocation(db: Db, id: number, now: Date): Location {
+  const current = getLocation(db, id);
+  if (!current) throw new LocationError('not_found', 'Location not found');
+  requireTransition(current, 'candidate');
+  return updateLocationRow(db, id, { status: 'candidate', updatedAt: now });
 }

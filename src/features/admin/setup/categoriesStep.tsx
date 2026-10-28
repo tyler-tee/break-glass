@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'hono';
+import type { HoursNeed } from '../../../domain/types.js';
 import { slugify } from '../../../domain/slug.js';
 import { CategoryError, createCategory, getCategoryBySlug, listCategories } from '../../categories/repo.js';
 import { CATEGORY_PRESETS } from './presets.js';
@@ -11,8 +12,8 @@ export function registerCategoriesStep(app: Hono, ctx: SetupContext): void {
 
   const presetSlugs = new Set(CATEGORY_PRESETS.map((p) => p.slug));
 
-  type CategoryValues = { checked: ReadonlySet<string>; name: string; terms: string; target: string };
-  const CATEGORY_ORDER = ['presets', 'custom_name', 'custom_terms', 'custom_target'];
+  type CategoryValues = { checked: ReadonlySet<string>; name: string; terms: string; hours: string };
+  const CATEGORY_ORDER = ['presets', 'custom_name', 'custom_terms', 'custom_hours'];
 
   const categoriesPage = (c: Context, values: CategoryValues, errors: Errors = {}, status: Status = 200) => {
     const all = listCategories(db);
@@ -47,7 +48,7 @@ export function registerCategoriesStep(app: Hono, ctx: SetupContext): void {
                   {p.name}
                   <span class="field-hint">
                     {' '}
-                    Looks for {p.searchTerms.join(' and ')}; aims for {p.targetCount}.{have ? ' Already added.' : ''}
+                    Looks for {p.searchTerms.join(' and ')}.{have ? ' Already added.' : ''}
                   </span>
                 </label>
               </div>
@@ -103,21 +104,24 @@ export function registerCategoriesStep(app: Hono, ctx: SetupContext): void {
             )}
           />
           <Field
-            id="custom_target"
-            label="How many places do you want? (optional)"
-            hint="Leave blank for 5."
-            error={errors['custom_target']}
+            id="custom_hours"
+            label="When would you go?"
+            error={errors['custom_hours']}
             control={(describedBy, invalid) => (
-              <input
-                id="custom_target"
-                name="custom_target"
-                value={values.target}
-                inputmode="numeric"
-                autocomplete="off"
+              <select
+                id="custom_hours"
+                name="custom_hours"
                 aria-describedby={describedBy}
                 aria-invalid={invalid ? 'true' : undefined}
-                autofocus={focus === 'custom_target'}
-              />
+                autofocus={focus === 'custom_hours'}
+              >
+                <option value="daytime" selected={values.hours === 'daytime'}>
+                  Daytime
+                </option>
+                <option value="overnight" selected={values.hours !== 'daytime'}>
+                  Any time, including overnight
+                </option>
+              </select>
             )}
           />
         </fieldset>
@@ -126,7 +130,7 @@ export function registerCategoriesStep(app: Hono, ctx: SetupContext): void {
     );
   };
 
-  app.get('/categories', (c) => categoriesPage(c, { checked: new Set(), name: '', terms: '', target: '' }));
+  app.get('/categories', (c) => categoriesPage(c, { checked: new Set(), name: '', terms: '', hours: '' }));
 
   app.post('/categories', async (c) => {
     const body = await c.req.parseBody({ all: true });
@@ -136,8 +140,8 @@ export function registerCategoriesStep(app: Hono, ctx: SetupContext): void {
     const checked = new Set(many(body['preset']).filter((s) => presetSlugs.has(s)));
     const name = one(body['custom_name']).trim();
     const terms = one(body['custom_terms']);
-    const target = one(body['custom_target']).trim();
-    const values: CategoryValues = { checked, name, terms, target };
+    const hours = one(body['custom_hours']).trim();
+    const values: CategoryValues = { checked, name, terms, hours };
     const errors: Errors = {};
 
     // The custom category goes first so that an error saves nothing at all.
@@ -146,13 +150,13 @@ export function registerCategoriesStep(app: Hono, ctx: SetupContext): void {
         createCategory(db, {
           name,
           searchTerms: terms.split(/[\n\r,]+/),
-          ...(target === '' ? {} : { targetCount: Number(target) }),
+          ...(hours === '' ? {} : { hoursNeed: hours as HoursNeed }),
         });
       } catch (e) {
         if (!(e instanceof CategoryError)) throw e;
         const sameAsPreset = [...checked].some((slug) => slug === slugify(name));
         if (!(e.code === 'duplicate' && sameAsPreset)) {
-          const field = e.field === 'target_count' ? 'custom_target' : e.field === 'search_terms' ? 'custom_terms' : 'custom_name';
+          const field = e.field === 'hours_need' ? 'custom_hours' : e.field === 'search_terms' ? 'custom_terms' : 'custom_name';
           errors[field] = e.message;
         }
       }
@@ -162,7 +166,7 @@ export function registerCategoriesStep(app: Hono, ctx: SetupContext): void {
     for (const p of CATEGORY_PRESETS) {
       if (!checked.has(p.slug) || getCategoryBySlug(db, p.slug)) continue; // idempotent by slug
       try {
-        createCategory(db, { name: p.name, searchTerms: [...p.searchTerms], targetCount: p.targetCount });
+        createCategory(db, { name: p.name, searchTerms: [...p.searchTerms], hoursNeed: p.hoursNeed });
       } catch (e) {
         if (!(e instanceof CategoryError && e.code === 'duplicate')) throw e;
       }

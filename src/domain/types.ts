@@ -1,4 +1,10 @@
 export type LocationStatus = 'candidate' | 'approved' | 'warn' | 'rejected';
+export type HoursNeed = 'overnight' | 'daytime';
+export type RankVerdict = 'pick' | 'backup' | 'avoid';
+export type RankedBy = 'llm' | 'rules';
+export type FindRunStatus = 'running' | 'done' | 'failed';
+export type FindRunCategoryState = 'waiting' | 'searching' | 'ranking' | 'done' | 'failed' | 'stopped';
+export type FindRunProgress = Record<string, { state: FindRunCategoryState; found?: number; message?: string }>;
 export type BusinessStatus = 'OPERATIONAL' | 'CLOSED_TEMPORARILY' | 'CLOSED_PERMANENTLY';
 export type ProtocolStatus = 'draft' | 'in_review' | 'published' | 'superseded' | 'rejected';
 export type Interval = { open: string; close: string };          // "HHMM"; close < open means next day

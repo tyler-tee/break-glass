@@ -47,16 +47,30 @@ async function harness(opts: { key?: boolean; fetch?: typeof fetch; home?: boole
 const slugs = (db: ReturnType<typeof createTestDb>) => listCategories(db).map((c) => c.slug).sort();
 
 describe('categories step', () => {
-  it('lists the six presets with their terms and targets', () => {
-    expect(CATEGORY_PRESETS.map((p) => [p.name, p.slug, p.targetCount])).toEqual([
-      ['Urgent care', 'urgent-care', 3],
-      ['Emergency room', 'emergency-room', 2],
-      ['24-hour pharmacy', '24-hour-pharmacy', 2],
-      ['Dentist (emergency)', 'dentist-emergency', 3],
-      ['Emergency vet', 'emergency-vet', 2],
-      ['Pediatrician', 'pediatrician', 3],
+  it('lists the seven presets with their terms and hours need', () => {
+    expect(CATEGORY_PRESETS.map((p) => [p.name, p.slug, p.hoursNeed])).toEqual([
+      ['Urgent care', 'urgent-care', 'daytime'],
+      ['Emergency room', 'emergency-room', 'overnight'],
+      ["Children's ER", 'children-s-er', 'overnight'],
+      ['24-hour pharmacy', '24-hour-pharmacy', 'overnight'],
+      ['Dentist (emergency)', 'dentist-emergency', 'overnight'],
+      ['Emergency vet', 'emergency-vet', 'overnight'],
+      ['Pediatrician', 'pediatrician', 'daytime'],
     ]);
     expect(CATEGORY_PRESETS[0]!.searchTerms).toEqual(['urgent care', 'walk-in clinic']);
+  });
+
+  it("offers the Children's ER preset and saves it as overnight with its search terms", async () => {
+    const { db, post, get } = await harness();
+    const html = await (await get('/admin/setup/categories')).text();
+    expect(html).toContain("Children&#39;s ER");
+    expect(html).not.toContain('aims for');
+    await post('/admin/setup/categories', { preset: ['children-s-er'], go: 'next' });
+    expect(listCategories(db)[0]).toMatchObject({
+      name: "Children's ER",
+      hoursNeed: 'overnight',
+      searchTerms: ["children's emergency room", 'pediatric emergency room', "children's hospital"],
+    });
   });
 
   it('creating presets is idempotent and existing ones render checked, disabled and "Already added"', async () => {
@@ -67,7 +81,7 @@ describe('categories step', () => {
     expect(res.headers.get('location')).toBe('/admin/setup/places');
     expect(listCategories(db)).toHaveLength(3);
     const urgent = listCategories(db).find((c) => c.slug === 'urgent-care')!;
-    expect(urgent).toMatchObject({ name: 'Urgent care', searchTerms: ['urgent care', 'walk-in clinic'], targetCount: 3 });
+    expect(urgent).toMatchObject({ name: 'Urgent care', searchTerms: ['urgent care', 'walk-in clinic'], hoursNeed: 'daytime' });
 
     const again = await post('/admin/setup/categories', fields);
     expect(again.status).toBe(302);
@@ -82,20 +96,26 @@ describe('categories step', () => {
     expect(input('emergency-vet')).not.toContain('disabled');
   });
 
-  it('adds a custom category with terms split on lines and commas, default target 5', async () => {
+  it('adds a custom category with terms split on lines and commas, default overnight', async () => {
     const { db, post } = await harness();
     const res = await post('/admin/setup/categories', {
       custom_name: 'Eye doctor',
       custom_terms: 'eye doctor\noptometrist, ophthalmologist',
-      custom_target: '',
+      custom_hours: '',
       go: 'next',
     });
     expect(res.status).toBe(302);
     expect(listCategories(db)[0]).toMatchObject({
       slug: 'eye-doctor',
       searchTerms: ['eye doctor', 'optometrist', 'ophthalmologist'],
-      targetCount: 5,
+      hoursNeed: 'overnight',
     });
+  });
+
+  it('adds a custom category that is only needed in the daytime', async () => {
+    const { db, post } = await harness();
+    await post('/admin/setup/categories', { custom_name: 'Eye doctor', custom_terms: 'eye doctor', custom_hours: 'daytime', go: 'next' });
+    expect(listCategories(db)[0]).toMatchObject({ hoursNeed: 'daytime' });
   });
 
   it('custom validation errors re-render with 400, an alert beside the field, and save nothing', async () => {
@@ -104,8 +124,7 @@ describe('categories step', () => {
       [{ custom_name: '', custom_terms: 'eye doctor' }, 'custom_name', /Name is required/],
       [{ custom_name: '***', custom_terms: 'x' }, 'custom_name', /letters or numbers/],
       [{ custom_name: 'Eye doctor', custom_terms: '  , ' }, 'custom_terms', /search term/],
-      [{ custom_name: 'Eye doctor', custom_terms: 'eyes', custom_target: '0' }, 'custom_target', /whole number/],
-      [{ custom_name: 'Eye doctor', custom_terms: 'eyes', custom_target: 'abc' }, 'custom_target', /whole number/],
+      [{ custom_name: 'Eye doctor', custom_terms: 'eyes', custom_hours: 'sometimes' }, 'custom_hours', /when you would go/],
     ];
     for (const [fields, field, message] of cases) {
       // custom_name '' with terms filled counts as an attempt, so it must be reported
@@ -175,7 +194,7 @@ describe('categories step', () => {
     };
     expect(field(() => createCategory(db, { name: '', searchTerms: ['x'] }))).toBe('name');
     expect(field(() => createCategory(db, { name: 'A', searchTerms: [] }))).toBe('search_terms');
-    expect(field(() => createCategory(db, { name: 'A', searchTerms: ['x'], targetCount: 0 }))).toBe('target_count');
+    expect(field(() => createCategory(db, { name: 'A', searchTerms: ['x'], hoursNeed: 'sometimes' as never }))).toBe('hours_need');
     createCategory(db, { name: 'A', searchTerms: ['x'] });
     expect(field(() => createCategory(db, { name: 'a', searchTerms: ['x'] }))).toBe('name');
   });
@@ -189,27 +208,27 @@ describe('categories step', () => {
 });
 
 describe('places step without a key', () => {
-  it('offers only manual entry, a note about the key, and 0 approved of target N per category', async () => {
+  it('offers only manual entry, a note about the key, and 0 of 3 picked per category', async () => {
     const { db, get } = await harness();
-    createCategory(db, { name: 'Test Dentist', searchTerms: ['emergency dentist'], targetCount: 3 });
+    createCategory(db, { name: 'Test Dentist', searchTerms: ['emergency dentist'] });
     const res = await get('/admin/setup/places');
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain('0 approved of target 3');
+    expect(html).toContain('0 of 3 picked');
     expect(html).toContain('Add a place by hand');
     expect(html).not.toContain('>Find places</button>');
     expect(html).not.toContain('/admin/setup/places/discover/');
     expect(html).toMatch(/Google Places key[^<]*<a href="\/admin\/setup\/services">/);
   });
 
-  it('counts approved and warn locations toward the target', async () => {
+  it('counts approved and warn locations as picked', async () => {
     const { db, get } = await harness();
-    const cat = createCategory(db, { name: 'Test Dentist', searchTerms: ['x'], targetCount: 4 });
+    const cat = createCategory(db, { name: 'Test Dentist', searchTerms: ['x'] });
     const at = new Date();
     for (const [name, status] of [['A', 'approved'], ['B', 'warn'], ['C', 'candidate'], ['D', 'rejected']] as const) {
       db.insert(locations).values({ categoryId: cat.id, name, status, createdAt: at, updatedAt: at }).run();
     }
-    expect(await (await get('/admin/setup/places')).text()).toContain('2 approved of target 4');
+    expect(await (await get('/admin/setup/places')).text()).toContain('2 of 3 picked');
   });
 
   it('with no categories it points back to the Categories step', async () => {
@@ -241,7 +260,7 @@ describe('places step without a key', () => {
     expect(approve.status).toBe(302);
     expect(approve.headers.get('location')).toBe('/admin/setup/places#test-dentist');
     expect(db.select().from(locations).get()!.status).toBe('approved');
-    expect(await (await get('/admin/setup/places')).text()).toContain('1 approved of target 5');
+    expect(await (await get('/admin/setup/places')).text()).toContain('1 of 3 picked');
   });
 
   it('manual-add validation errors re-render on the wizard with 400 and an alert', async () => {
@@ -300,7 +319,7 @@ describe('places step with a Places key', () => {
       expect(html).toContain(`/admin/locations/${r.id}/reject`);
     }
     expect(html).toContain('name="return_to" value="/admin/setup/places#test-dentist"');
-    expect(html).toContain('0 approved of target 5');
+    expect(html).toContain('0 of 3 picked');
   });
 
   it('approving from the wizard returns to the wizard and updates the count', async () => {
@@ -310,7 +329,7 @@ describe('places step with a Places key', () => {
     const res = await post(`/admin/locations/${near.id}/approve`, { return_to: '/admin/setup/places#test-dentist' });
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/admin/setup/places#test-dentist');
-    expect(await (await get('/admin/setup/places')).text()).toContain('1 approved of target 5');
+    expect(await (await get('/admin/setup/places')).text()).toContain('1 of 3 picked');
   });
 
   it('only whitelisted numeric status params are reflected', async () => {
