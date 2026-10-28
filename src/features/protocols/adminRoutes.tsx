@@ -215,11 +215,11 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
               <textarea name="body_md" rows={20}>
                 {opts.bodyMd ?? version.bodyMd}
               </textarea>
-              <button type="submit">Save</button>
+              <button type="submit" class="btn-secondary">Save</button>
             </form>
             {version.status === 'draft' && (
               <form method="post" action={`${base}/submit${setupQs(opts.setup)}`}>
-                <button type="submit">Submit for review</button>
+                <button type="submit" class="btn-secondary">Submit for review</button>
               </form>
             )}
             <form method="post" action={`${base}/publish${setupQs(opts.setup)}`}>

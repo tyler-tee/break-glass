@@ -8,10 +8,10 @@ A self-hosted web app for the home LAN that answers one question fast: "Where do
 
 ## Quick start
 
-You need Docker with Compose on the server. Nothing else, and no `.env` file.
+You need Docker with Compose on the server (Docker Compose v2.24 or newer, because `docker-compose.yml` reads an optional `.env`). Nothing else, and no `.env` file.
 
 ```
-git clone <this repo> break-glass
+git clone https://github.com/tyler-tee/break-glass.git
 cd break-glass
 docker compose up -d --build
 docker compose logs app

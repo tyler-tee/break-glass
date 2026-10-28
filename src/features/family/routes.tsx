@@ -53,7 +53,7 @@ export function familyRoutes(deps: AppDeps): Hono {
         </a>
         <form class="search" method="get" action="/search" role="search">
           <input type="search" name="q" placeholder="Search (e.g. dentist)" aria-label="Search" />
-          <button type="submit">
+          <button type="submit" class="btn-secondary">
             <Icon name="search" /> Search
           </button>
         </form>

@@ -39,7 +39,7 @@ export const ReviewQueue: FC<{
         </form>
         <form method="post" action={rejectAction(item.id)}>
           {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-          <button type="submit">
+          <button type="submit" class="btn-secondary">
             Reject
           </button>
         </form>
