@@ -16,10 +16,14 @@ import {
 
 export type LocationErrorCode = 'invalid' | 'not_found' | 'invalid_transition';
 
+/** The form field a validation error belongs to, so callers need not parse the message. */
+export type LocationField = 'name' | 'category_id' | 'lat' | 'lng';
+
 export class LocationError extends Error {
   constructor(
     public code: LocationErrorCode,
     message: string,
+    public field?: LocationField,
   ) {
     super(message);
     this.name = 'LocationError';
@@ -63,13 +67,13 @@ const blankToNull = (v: string | null | undefined): string | null => {
 
 function validated(db: Db, input: ManualLocationInput) {
   const name = input.name.trim();
-  if (name === '') throw new LocationError('invalid', 'Name is required');
-  if (!getCategory(db, input.categoryId)) throw new LocationError('invalid', 'Category does not exist');
+  if (name === '') throw new LocationError('invalid', 'Name is required', 'name');
+  if (!getCategory(db, input.categoryId)) throw new LocationError('invalid', 'Category does not exist', 'category_id');
   const lat = input.lat ?? null;
   const lng = input.lng ?? null;
-  if ((lat === null) !== (lng === null)) throw new LocationError('invalid', 'Latitude and longitude must both be set or both be empty');
-  if (lat !== null && !(lat >= -90 && lat <= 90)) throw new LocationError('invalid', 'Latitude must be between -90 and 90');
-  if (lng !== null && !(lng >= -180 && lng <= 180)) throw new LocationError('invalid', 'Longitude must be between -180 and 180');
+  if ((lat === null) !== (lng === null)) throw new LocationError('invalid', 'Latitude and longitude must both be set or both be empty', 'lat');
+  if (lat !== null && !(lat >= -90 && lat <= 90)) throw new LocationError('invalid', 'Latitude must be between -90 and 90', 'lat');
+  if (lng !== null && !(lng >= -180 && lng <= 180)) throw new LocationError('invalid', 'Longitude must be between -180 and 180', 'lng');
 
   const { homeLat, homeLng } = getSettings(db);
   const distanceMi =

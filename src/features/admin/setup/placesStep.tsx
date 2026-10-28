@@ -258,7 +258,7 @@ export function registerPlacesStep(app: Hono, ctx: SetupContext): void {
       );
     } catch (e) {
       if (!(e instanceof LocationError)) throw e;
-      const field = e.message.startsWith('Name') ? 'manual_name' : 'manual_category';
+      const field = e.field === 'name' ? 'manual_name' : 'manual_category';
       return placesPage(c, { manual, manualError: { field, message: e.message }, status: 400 });
     }
     const slug = getCategory(db, created.categoryId)?.slug;

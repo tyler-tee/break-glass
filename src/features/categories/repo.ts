@@ -7,10 +7,14 @@ export type Category = typeof categories.$inferSelect;
 
 export type CategoryErrorCode = 'duplicate' | 'in_use' | 'invalid' | 'not_found';
 
+/** The form field a validation error belongs to, so callers need not parse the message. */
+export type CategoryField = 'name' | 'search_terms' | 'target_count';
+
 export class CategoryError extends Error {
   constructor(
     public code: CategoryErrorCode,
     message: string,
+    public field?: CategoryField,
   ) {
     super(message);
     this.name = 'CategoryError';
@@ -37,18 +41,18 @@ type CategoryFields = {
 
 function validate(db: Db, fields: CategoryFields, selfId?: number): CategoryFields & { slug: string } {
   const name = fields.name.trim();
-  if (name === '') throw new CategoryError('invalid', 'Name is required');
+  if (name === '') throw new CategoryError('invalid', 'Name is required', 'name');
   const slug = slugify(name);
-  if (slug === '') throw new CategoryError('invalid', 'Name must contain letters or numbers');
+  if (slug === '') throw new CategoryError('invalid', 'Name must contain letters or numbers', 'name');
   const searchTerms = [...new Set(fields.searchTerms.map((t) => t.trim()).filter((t) => t !== ''))];
-  if (searchTerms.length === 0) throw new CategoryError('invalid', 'At least one search term is required');
+  if (searchTerms.length === 0) throw new CategoryError('invalid', 'At least one search term is required', 'search_terms');
   if (!Number.isInteger(fields.targetCount) || fields.targetCount < 1) {
-    throw new CategoryError('invalid', 'Target count must be a whole number of at least 1');
+    throw new CategoryError('invalid', 'Target count must be a whole number of at least 1', 'target_count');
   }
   const clash = listCategories(db).find(
     (c) => c.id !== selfId && (c.slug === slug || c.name.toLowerCase() === name.toLowerCase()),
   );
-  if (clash) throw new CategoryError('duplicate', `A category named "${clash.name}" already exists`);
+  if (clash) throw new CategoryError('duplicate', `A category named "${clash.name}" already exists`, 'name');
   return { name, slug, searchTerms, targetCount: fields.targetCount };
 }
 

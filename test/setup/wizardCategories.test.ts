@@ -152,6 +152,34 @@ describe('categories step', () => {
     expect(await (await get('/admin/setup/categories')).text()).toContain('Eye doctor');
   });
 
+  it('lists existing non-preset categories as already added, with an edit link', async () => {
+    const { db, get } = await harness();
+    const eye = createCategory(db, { name: 'Eye doctor', searchTerms: ['eyes'] });
+    createCategory(db, { name: 'Urgent care', searchTerms: ['urgent care'] });
+    const html = await (await get('/admin/setup/categories')).text();
+    expect(html).toMatch(/<legend>Already added<\/legend>[\s\S]*Eye doctor/);
+    expect(html).toContain(`href="/admin/categories/${eye.id}/edit"`);
+    // Presets stay in the preset list, not in the custom list.
+    const custom = html.slice(html.indexOf('<legend>Already added</legend>'), html.indexOf('<legend>Add your own</legend>'));
+    expect(custom).not.toContain('Urgent care');
+  });
+
+  it('errors carry the field they belong to', async () => {
+    const { db } = await harness();
+    const field = (fn: () => unknown) => {
+      try {
+        fn();
+      } catch (e) {
+        return (e as { field?: string }).field;
+      }
+    };
+    expect(field(() => createCategory(db, { name: '', searchTerms: ['x'] }))).toBe('name');
+    expect(field(() => createCategory(db, { name: 'A', searchTerms: [] }))).toBe('search_terms');
+    expect(field(() => createCategory(db, { name: 'A', searchTerms: ['x'], targetCount: 0 }))).toBe('target_count');
+    createCategory(db, { name: 'A', searchTerms: ['x'] });
+    expect(field(() => createCategory(db, { name: 'a', searchTerms: ['x'] }))).toBe('name');
+  });
+
   it('Finish later saves the checked presets and goes to the overview', async () => {
     const { db, post } = await harness();
     const res = await post('/admin/setup/categories', { preset: ['emergency-vet'], go: 'later' });

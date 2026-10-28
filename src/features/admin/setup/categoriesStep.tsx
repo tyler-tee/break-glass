@@ -18,7 +18,9 @@ export function registerCategoriesStep(app: Hono, ctx: SetupContext): void {
   const CATEGORY_ORDER = ['presets', 'custom_name', 'custom_terms', 'custom_target'];
 
   const categoriesPage = (c: Context, values: CategoryValues, errors: Errors = {}, status: Status = 200) => {
-    const existing = new Set(listCategories(db).map((x) => x.slug));
+    const all = listCategories(db);
+    const existing = new Set(all.map((x) => x.slug));
+    const others = all.filter((x) => !presetSlugs.has(x.slug));
     const focus = firstError(errors, CATEGORY_ORDER);
     return render(
       c,
@@ -60,6 +62,18 @@ export function registerCategoriesStep(app: Hono, ctx: SetupContext): void {
             </p>
           )}
         </fieldset>
+        {others.length > 0 && (
+          <fieldset>
+            <legend>Already added</legend>
+            <ul>
+              {others.map((x) => (
+                <li>
+                  {x.name} <a href={`/admin/categories/${x.id}/edit`}>Edit</a>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
+        )}
         <fieldset>
           <legend>Add your own</legend>
           <Field id="custom_name" label="Name" hint="For example, Eye doctor." error={errors['custom_name']} control={(describedBy, invalid) => (
@@ -141,7 +155,7 @@ export function registerCategoriesStep(app: Hono, ctx: SetupContext): void {
         if (!(e instanceof CategoryError)) throw e;
         const sameAsPreset = [...checked].some((slug) => slug === slugify(name));
         if (!(e.code === 'duplicate' && sameAsPreset)) {
-          const field = e.message.startsWith('Target') ? 'custom_target' : e.message.includes('search term') ? 'custom_terms' : 'custom_name';
+          const field = e.field === 'target_count' ? 'custom_target' : e.field === 'search_terms' ? 'custom_terms' : 'custom_name';
           errors[field] = e.message;
         }
       }
