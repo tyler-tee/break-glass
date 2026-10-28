@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Child } from 'hono/jsx';
 import type { AppDeps } from '../../app.js';
 import { page } from '../../web/Layout.js';
-import type { HoursNeed } from '../../domain/types.js';
+import { AREAS, type Area, type HoursNeed } from '../../domain/types.js';
 import { CategoryError, createCategory, deleteCategory, getCategory, listCategories, updateCategory } from './repo.js';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -11,7 +11,11 @@ const parseTerms = (v: unknown): string[] => str(v).split(/[\n\r,]+/);
 const hoursNeedOf = (v: unknown): { hoursNeed?: HoursNeed } =>
   str(v).trim() === '' ? {} : { hoursNeed: str(v) as HoursNeed };
 
-type FormValues = { name: string; searchTerms: string; hoursNeed: string };
+// Blank means "keep the current area" (edit) or "health" (create); anything else is validated in the repo.
+const areaOf = (v: unknown): { area?: Area } => (str(v).trim() === '' ? {} : { area: str(v) as Area });
+const AREA_LABEL: Record<Area, string> = { health: 'Health', home: 'Home' };
+
+type FormValues = { name: string; searchTerms: string; hoursNeed: string; area: string };
 
 export function categoriesRoutes(deps: AppDeps): Hono {
   const { db } = deps;
@@ -30,35 +34,42 @@ export function categoriesRoutes(deps: AppDeps): Hono {
           </a>
           <a href="/admin/places/find">Find &amp; rank places for these categories</a>
         </div>
-        <table class="stack-table t-categories">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Slug</th>
-              <th>Search terms</th>
-              <th>Hours</th>
-              <th>Area</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {listCategories(db).map((cat) => (
-              <tr>
-                <td>{cat.name}</td>
-                <td>{cat.slug}</td>
-                <td>{cat.searchTerms.join(', ')}</td>
-                <td>{cat.hoursNeed === 'daytime' ? 'Daytime' : 'Overnight'}</td>
-                <td>{cat.area === 'home' ? 'Home' : 'Health'}</td>
-                <td class="row-actions">
-                  <a href={`/admin/categories/${cat.id}/edit`}>Edit</a>
-                  <form method="post" action={`/admin/categories/${cat.id}/delete`}>
-                    <button type="submit" class="btn-danger">Delete</button>
-                  </form>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {AREAS.map((area) => {
+          const cats = listCategories(db, { area });
+          if (cats.length === 0 && area === 'home') return null;
+          return (
+            <section aria-labelledby={`area-${area}`}>
+              <h2 id={`area-${area}`}>{AREA_LABEL[area]}</h2>
+              <table class="stack-table t-categories">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Slug</th>
+                    <th>Search terms</th>
+                    <th>Hours</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cats.map((cat) => (
+                    <tr>
+                      <td>{cat.name}</td>
+                      <td>{cat.slug}</td>
+                      <td>{cat.searchTerms.join(', ')}</td>
+                      <td>{cat.hoursNeed === 'daytime' ? 'Daytime' : 'Overnight'}</td>
+                      <td class="row-actions">
+                        <a href={`/admin/categories/${cat.id}/edit`}>Edit</a>
+                        <form method="post" action={`/admin/categories/${cat.id}/delete`}>
+                          <button type="submit" class="btn-danger">Delete</button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          );
+        })}
       </>,
       opts.status ?? 200,
       { layout: 'admin', activeNav: 'categories' },
@@ -103,6 +114,19 @@ export function categoriesRoutes(deps: AppDeps): Hono {
               </select>
             </label>
           </p>
+          <p>
+            <label>
+              Area
+              <select name="area">
+                <option value="health" selected={v.area !== 'home'}>
+                  Health
+                </option>
+                <option value="home" selected={v.area === 'home'}>
+                  Home
+                </option>
+              </select>
+            </label>
+          </p>
           <button type="submit">Save</button>
         </form>
         <p>
@@ -117,6 +141,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
     name: str(body['name']),
     searchTerms: str(body['search_terms']),
     hoursNeed: str(body['hours_need']),
+    area: str(body['area']),
   });
 
   app.get('/', (c) => listPage(c));
@@ -126,6 +151,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
       name: '',
       searchTerms: '',
       hoursNeed: 'overnight',
+      area: 'health',
     }),
   );
 
@@ -136,6 +162,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
       name: cat.name,
       searchTerms: cat.searchTerms.join('\n'),
       hoursNeed: cat.hoursNeed,
+      area: cat.area,
     });
   });
 
@@ -146,6 +173,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
         name: str(body['name']),
         searchTerms: parseTerms(body['search_terms']),
         ...hoursNeedOf(body['hours_need']),
+        ...areaOf(body['area']),
       });
     } catch (e) {
       if (e instanceof CategoryError) {
@@ -180,6 +208,7 @@ export function categoriesRoutes(deps: AppDeps): Hono {
         name: str(body['name']),
         searchTerms: parseTerms(body['search_terms']),
         ...hoursNeedOf(body['hours_need']),
+        ...areaOf(body['area']),
       });
     } catch (e) {
       if (e instanceof CategoryError) {

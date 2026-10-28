@@ -114,4 +114,71 @@
     });
     update(false);
   });
+
+  // House fact form: show only the fields that apply to the chosen kind. Hidden fields are disabled so they
+  // are not posted. Without this script every field stays visible and the server validates.
+  each(document.querySelectorAll('form[data-fact-form]'), function (form) {
+    var radios = form.querySelectorAll('input[name="kind"]');
+    var fields = form.querySelectorAll('[data-kinds]');
+    function kind() {
+      var k = '';
+      each(radios, function (r) { if (r.checked) k = r.value; });
+      return k;
+    }
+    function update() {
+      var k = kind();
+      each(fields, function (f) {
+        var show = f.getAttribute('data-kinds').split(' ').indexOf(k) !== -1;
+        f.hidden = !show;
+        each(f.querySelectorAll('input, select, textarea'), function (el) { el.disabled = !show; });
+      });
+    }
+    form.addEventListener('change', function (e) {
+      if (e.target && e.target.name === 'kind') update();
+    });
+    update();
+  });
+
+  // House photos: shrink the picture on the phone before it uploads. Drawing it onto a canvas applies the
+  // camera's rotation and drops the location data. If the browser cannot decode it (for example HEIC), the file
+  // is left as it was and the server explains.
+  var MAX_EDGE = 1600;
+  each(document.querySelectorAll('form[data-photo-form]'), function (form) {
+    form.classList.add('js');
+    var inputs = form.querySelectorAll('input[type="file"]');
+    var label = form.querySelector('[data-photo-name]');
+    function show(name) {
+      if (!label) return;
+      label.textContent = name ? 'Ready to upload: ' + name : '';
+      label.hidden = !name;
+    }
+    function shrink(input) {
+      var file = input.files && input.files[0];
+      if (!file) return;
+      // One photo at a time: clear the other input.
+      each(inputs, function (other) { if (other !== input) other.value = ''; });
+      show(file.name);
+      if (!window.createImageBitmap || !window.DataTransfer || !HTMLCanvasElement.prototype.toBlob) return;
+      createImageBitmap(file, { imageOrientation: 'from-image' }).then(function (bitmap) {
+        var scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        if (bitmap.close) bitmap.close();
+        canvas.toBlob(function (blob) {
+          if (!blob) return;
+          var name = (file.name.replace(/\.[^.]*$/, '') || 'photo') + '.jpg';
+          var out = new File([blob], name, { type: 'image/jpeg' });
+          var transfer = new DataTransfer();
+          transfer.items.add(out);
+          input.files = transfer.files;
+          show(name);
+        }, 'image/jpeg', 0.82);
+      }).catch(function () { /* leave the file as it is */ });
+    }
+    each(inputs, function (input) {
+      input.addEventListener('change', function () { shrink(input); });
+    });
+  });
 })();

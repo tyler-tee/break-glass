@@ -13,7 +13,8 @@ export type AdminNavKey =
   | 'places'
   | 'find'
   | 'warnings'
-  | 'protocols';
+  | 'protocols'
+  | 'house';
 
 export type PageChrome = {
   layout?: LayoutKind;
@@ -56,6 +57,7 @@ const NAV: { key: AdminNavKey; href: string; label: string }[] = [
   { key: 'places', href: '/admin/locations', label: 'All places' },
   { key: 'warnings', href: '/admin/warn', label: 'Warnings' },
   { key: 'protocols', href: '/admin/protocols', label: 'Protocols' },
+  { key: 'house', href: '/admin/house', label: 'House' },
   { key: 'settings', href: '/admin/settings', label: 'Settings' },
 ];
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { Db } from '../src/db/client.js';
-import { categories, houseFactPhotos } from '../src/db/schema.js';
+import { categories, houseFactPhotos, protocols } from '../src/db/schema.js';
 import { loadEnv } from '../src/env.js';
 import { hashPassword } from '../src/features/admin/auth.js';
 import { CategoryError, deleteCategory } from '../src/features/categories/repo.js';
@@ -9,6 +9,7 @@ import {
   HouseFactError, addPhoto, createFact, deleteFact, deletePhoto, factsForCategory, factsForSystems, getFact,
   getPhoto, listFacts, listPhotos, markChecked, updateFact, type HouseFactInput,
 } from '../src/features/house/repo.js';
+import { HOME_CATEGORY_PRESETS } from '../src/features/admin/setup/presets.js';
 import { adminLogin } from './helpers/adminLogin.js';
 import { createTestDb } from './helpers/testDb.js';
 
@@ -301,7 +302,7 @@ describe('admin house routes', () => {
     const f = createFact(db, shutoff(), NOW);
     const heic = await upload(f.id, ftyp('heic'));
     expect(heic.status).toBe(400);
-    expect(await heic.text()).toContain("iPhone HEIC photos aren't supported");
+    expect(await heic.text()).toMatch(/iPhone HEIC photos aren(&#39;|')t supported/);
     expect((await upload(f.id, GIF)).status).toBe(400);
     const none = await app.request(`/admin/house/${f.id}/photos`, {
       method: 'POST', headers: { cookie, ...origin }, body: new FormData(),
@@ -350,5 +351,221 @@ describe('admin house routes', () => {
     fd.set('photo', new File([big], 'p.jpg'));
     const getLike = await app.request(`/admin/house/${f.id}/photos-x`, { method: 'POST', headers: { cookie, ...origin }, body: fd });
     expect(getLike.status).toBe(413);
+  });
+});
+
+describe('admin house UI', () => {
+  const origin = { origin: 'http://localhost' };
+  const get = (path: string) => app.request(path, { headers: { cookie } });
+  const form = (path: string, body: URLSearchParams | Record<string, string>) =>
+    app.request(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie, ...origin },
+      body: new URLSearchParams(body).toString(),
+    });
+  const upload = (factId: number, bytes: Uint8Array, name = 'photo', extra: Record<string, string> = {}) => {
+    const fd = new FormData();
+    fd.set(name, new File([bytes], 'p.bin', { type: 'image/jpeg' }));
+    for (const [k, v] of Object.entries(extra)) fd.set(k, v);
+    return app.request(`/admin/house/${factId}/photos`, { method: 'POST', headers: { cookie, ...origin }, body: fd });
+  };
+
+  it('lists facts in Shutoffs, Who to call and Notes with where, phone, trade, checked date and Still right', async () => {
+    const trade = homeCat('Emergency plumber');
+    const f = createFact(db, shutoff({ title: 'Water main', whereNote: 'Front yard by the mailbox' }), NOW);
+    createFact(db, { kind: 'utility', system: 'water', title: 'Water utility', org: 'Sample Water Co', phone: '555-0100' }, NOW);
+    createFact(db, { kind: 'contact', system: 'water', title: 'Plumber', org: 'Sample Plumbing', phone: '555-0101', categoryId: trade.id }, NOW);
+    createFact(db, { kind: 'note', title: 'Filter size', instructions: '20x25x1' }, NOW);
+    addPhoto(db, f.id, JPEG, 'valve', NOW);
+    const html = await (await get('/admin/house')).text();
+    expect(html).toMatch(/<h2[^>]*>Shutoffs<\/h2>/);
+    expect(html).toMatch(/<h2[^>]*>Who to call<\/h2>/);
+    expect(html).toMatch(/<h2[^>]*>Notes<\/h2>/);
+    expect(html).toContain('Front yard by the mailbox');
+    expect(html).toContain('Sample Water Co');
+    expect(html).toContain('href="tel:');
+    expect(html).toContain('Trade: Emergency plumber');
+    expect(html).toContain('20x25x1');
+    expect(html).toContain('Checked Oct 27, 2026');
+    expect(html).toContain('Still right');
+    expect(html).toContain(`/house/photos/${listPhotos(db, f.id)[0]!.id}`);
+    expect(html).toMatch(/<a href="\/admin\/house" aria-current="page">/);
+  });
+
+  it('Still right sets checkedAt and leaves the rest alone', async () => {
+    const f = createFact(db, shutoff(), NOW);
+    app = createApp({
+      db,
+      env: loadEnv({ SESSION_SECRET: 's'.repeat(32), ADMIN_PASSWORD_HASH: await hashPassword('correct horse') }),
+      now: () => LATER,
+    });
+    cookie = await adminLogin(app, 'correct horse');
+    const res = await form(`/admin/house/${f.id}/check`, {});
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/admin/house');
+    expect(getFact(db, f.id)).toMatchObject({ title: 'Water main', checkedAt: LATER });
+    expect((await form('/admin/house/999/check', {})).status).toBe(404);
+  });
+
+  it('shows Set up Home while no home category exists, and creates only the checked trades', async () => {
+    const before = await (await get('/admin/house')).text();
+    expect(before).toContain('Set up Home');
+    for (const p of HOME_CATEGORY_PRESETS) expect(before).toContain(p.name.replace('&', '&amp;'));
+    expect(before).toMatch(/id="preset-emergency-plumber" name="preset" value="emergency-plumber" checked/);
+    expect(before).not.toMatch(/id="preset-locksmith"[^>]*checked/);
+
+    // Submit what the browser would: the pre-checked boxes only.
+    const body = new URLSearchParams();
+    for (const p of HOME_CATEGORY_PRESETS.filter((x) => x.checked)) body.append('preset', p.slug);
+    const res = await form('/admin/house/setup', body);
+    expect(res.status).toBe(302);
+    const made = db.select().from(categories).all();
+    expect(made.map((c) => c.slug).sort()).toEqual(HOME_CATEGORY_PRESETS.filter((p) => p.checked).map((p) => p.slug).sort());
+    expect(made.every((c) => c.area === 'home')).toBe(true);
+
+    const after = await (await get('/admin/house?setup=1')).text();
+    expect(after).not.toContain('Set up Home</h2>');
+    expect(after).toContain('/admin/places/find');
+    // Running it again adds nothing.
+    await form('/admin/house/setup', body);
+    expect(db.select().from(categories).all()).toHaveLength(made.length);
+  });
+
+  it('refuses a setup with nothing checked', async () => {
+    const res = await form('/admin/house/setup', {});
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('Pick at least one trade');
+    expect(db.select().from(categories).all()).toEqual([]);
+  });
+
+  it('offers the starter guides as prefilled links to the protocol form, and links one already started', async () => {
+    const html = await (await get('/admin/house')).text();
+    expect(html).toContain('Start these guides');
+    expect(html).toContain(
+      '/admin/protocols/new?area=home&amp;title=Burst%20pipe%20or%20major%20leak&amp;tags=water%2C%20emergency-plumber%2C%20water-damage-restoration',
+    );
+    db.insert(protocols).values({ slug: 'toilet-overflow', title: 'Toilet overflow', tags: ['water'], area: 'home' }).run();
+    const again = await (await get('/admin/house')).text();
+    expect(again).toContain('Already started');
+  });
+
+  it('renders the fact form with segmented kind and system, every field, and the privacy alert', async () => {
+    homeCat('Emergency plumber');
+    const res = await get('/admin/house/new');
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    for (const k of ['shutoff', 'utility', 'contact', 'note']) expect(html).toContain(`name="kind" value="${k}"`);
+    expect(html).toContain('name="kind" value="shutoff" checked');
+    for (const [v, label] of [['water', 'Water'], ['electric', 'Power'], ['hvac', 'AC'], ['gas', 'Gas'], ['general', 'Other']]) {
+      expect(html).toContain(`name="system" value="${v}"`);
+      expect(html).toContain(`<span>${label}</span>`);
+    }
+    for (const label of ['Name', 'Where is it?', 'How to use it (optional)', 'Company', 'Phone', 'Trade (optional)']) expect(html).toContain(label);
+    expect(html).toContain('Needed for shutoffs.');
+    expect(html).toContain('Emergency plumber');
+    expect(html).toContain('Anyone on your home Wi-Fi can see this. Don&#39;t add alarm, lockbox or gate codes, or account numbers.');
+    expect(html).not.toContain('type="file"'); // photos need a saved fact first
+  });
+
+  it('keeps the submitted values and shows the message beside the field on an error', async () => {
+    const bad = await form('/admin/house', { kind: 'shutoff', system: 'electric', title: 'Breaker panel', where_note: '' });
+    expect(bad.status).toBe(400);
+    const html = await bad.text();
+    expect(html).toContain('Say where the shutoff is');
+    expect(html).toContain('id="where_note-error"');
+    expect(html).toContain('value="Breaker panel"');
+    expect(html).toContain('name="system" value="electric" checked');
+    expect(listFacts(db)).toEqual([]);
+
+    const f = createFact(db, shutoff(), NOW);
+    const badEdit = await form(`/admin/house/${f.id}`, { kind: 'utility', system: 'water', title: 'Water co', phone: '12' });
+    expect(badEdit.status).toBe(400);
+    const editHtml = await badEdit.text();
+    expect(editHtml).toContain('Enter a phone number with at least 7 digits');
+    expect(editHtml).toContain('Edit house fact');
+    expect(getFact(db, f.id)!.kind).toBe('shutoff');
+  });
+
+  it('creates a contact with a trade, edits it, and a new shutoff lands on its photos', async () => {
+    const trade = homeCat('Emergency plumber');
+    const made = await form('/admin/house', {
+      kind: 'contact', system: 'water', title: 'Plumber', org: 'Sample Plumbing', phone: '555-0101', category_id: String(trade.id),
+    });
+    expect(made.status).toBe(302);
+    expect(made.headers.get('location')).toBe('/admin/house');
+    const contact = listFacts(db)[0]!;
+    expect(contact).toMatchObject({ kind: 'contact', categoryId: trade.id, org: 'Sample Plumbing' });
+
+    const edit = await (await get(`/admin/house/${contact.id}/edit`)).text();
+    expect(edit).toContain('value="Plumber"');
+    expect(edit).toMatch(new RegExp(`<option value="${trade.id}" selected`));
+    expect(edit).toContain('Still right');
+    expect(edit).toContain('Delete fact');
+
+    const shut = await form('/admin/house', { kind: 'shutoff', system: 'water', title: 'Water main', where_note: 'Front yard' });
+    const created = listFacts(db).find((f) => f.title === 'Water main')!;
+    expect(shut.headers.get('location')).toBe(`/admin/house/${created.id}/edit?saved=1#photos`);
+    expect(await (await get(`/admin/house/${created.id}/edit?saved=1`)).text()).toContain('Saved. You can add photos below.');
+    expect((await get('/admin/house/999/edit')).status).toBe(404);
+  });
+
+  it('uploads through the Take photo or Choose file input and removes a photo through the UI', async () => {
+    const f = createFact(db, shutoff(), NOW);
+    const page0 = await (await get(`/admin/house/${f.id}/edit`)).text();
+    expect(page0).toContain('name="photo" accept="image/*" capture="environment"');
+    expect(page0).toContain('Take photo');
+    expect(page0).toContain('Choose file');
+    expect(page0).toContain('0 of 4');
+
+    const taken = await upload(f.id, JPEG, 'photo', { caption: 'by the valve', return_to: `/admin/house/${f.id}/edit#photos` });
+    expect(taken.status).toBe(302);
+    expect(taken.headers.get('location')).toBe(`/admin/house/${f.id}/edit#photos`);
+    const chosen = await upload(f.id, PNG, 'photo_file', { return_to: `/admin/house/${f.id}/edit#photos` });
+    expect(chosen.status).toBe(302);
+    expect(listPhotos(db, f.id).map((p) => p.mime)).toEqual(['image/jpeg', 'image/png']);
+
+    const page1 = await (await get(`/admin/house/${f.id}/edit`)).text();
+    expect(page1).toContain('by the valve');
+    expect(page1).toContain('Remove');
+    expect(page1).toContain('2 of 4');
+
+    const first = listPhotos(db, f.id)[0]!;
+    const del = await form(`/admin/house/photos/${first.id}/delete`, { return_to: `/admin/house/${f.id}/edit#photos` });
+    expect(del.status).toBe(302);
+    expect(listPhotos(db, f.id)).toHaveLength(1);
+  });
+
+  it('hides the upload form at four photos', async () => {
+    const f = createFact(db, shutoff(), NOW);
+    for (let i = 0; i < 4; i++) addPhoto(db, f.id, JPEG, null, NOW);
+    const html = await (await get(`/admin/house/${f.id}/edit`)).text();
+    expect(html).toContain('4 of 4');
+    expect(html).not.toContain('type="file"');
+    expect(html).toContain('Remove one to add another');
+  });
+
+  it('re-renders the edit page with the message when an upload fails', async () => {
+    const f = createFact(db, shutoff(), NOW);
+    const heic = await upload(f.id, ftyp('heic'));
+    expect(heic.status).toBe(400);
+    const html = await heic.text();
+    expect(html).toContain('Edit house fact');
+    expect(html).toContain('HEIC photos');
+    const none = await app.request(`/admin/house/${f.id}/photos`, { method: 'POST', headers: { cookie, ...origin }, body: new FormData() });
+    expect(none.status).toBe(400);
+    expect(await none.text()).toContain('Choose a photo to upload');
+  });
+
+  it('deletes a fact from the edit page', async () => {
+    const f = createFact(db, shutoff(), NOW);
+    const res = await form(`/admin/house/${f.id}/delete`, {});
+    expect(res.status).toBe(302);
+    expect(getFact(db, f.id)).toBeNull();
+  });
+
+  it('the House nav entry and the wizard Done step link to /admin/house', async () => {
+    expect(await (await get('/admin')).text()).toContain('href="/admin/house"');
+    const done = await get('/admin/setup/done');
+    expect(await done.text()).toContain('Set up Home (optional)');
   });
 });

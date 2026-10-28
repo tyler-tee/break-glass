@@ -3,7 +3,7 @@ import type { Child, FC } from 'hono/jsx';
 import type { ResolvedAppDeps } from '../../app.js';
 import type { FindRun } from '../../db/schema.js';
 import { PICKS_PER_CATEGORY } from '../../domain/ranking.js';
-import type { FindRunProgress, HoursNeed } from '../../domain/types.js';
+import { AREAS, type Area, type FindRunProgress, type HoursNeed } from '../../domain/types.js';
 import { extractOf, llmOf, placesOf } from '../../services/resolver.js';
 import { page } from '../../web/Layout.js';
 import { getSettings } from '../admin/settingsRepo.js';
@@ -29,6 +29,7 @@ import { LocationError } from './service.js';
 
 const BASE = '/admin/places/find';
 const SETUP_SERVICES = '/admin/setup/services';
+const AREA_HEADING: Record<Area, string> = { health: 'Health', home: 'Home' };
 
 type Status = 200 | 400;
 type Notice = { kind: 'status' | 'alert'; text: Child };
@@ -147,7 +148,9 @@ export function findPlacesRoutes(deps: ResolvedAppDeps): Hono {
     const radius = settings.defaultRadiusMi ?? 15;
     const tz = settings.homeTz;
     const t = now();
-    const cats = listCategories(db);
+    // Health first, then home, each in name order.
+    const cats = [...listCategories(db)].sort((a, b) => AREAS.indexOf(a.area) - AREAS.indexOf(b.area));
+    const hasBothAreas = new Set(cats.map((cat) => cat.area)).size > 1;
     const hasLlm = llmOf(deps) !== undefined;
     const hasPlaces = placesOf(deps) !== undefined;
     const views = new Map(cats.map((cat) => [cat.id, rankedView(db, cat.id)]));
@@ -227,10 +230,14 @@ export function findPlacesRoutes(deps: ResolvedAppDeps): Hono {
       <div class="find">
         {head}
         {notice}
-        <Picker cats={cats} onSite={onSite} hasLlm={hasLlm} hasPlaces={hasPlaces} />
+        <Picker cats={cats} grouped={hasBothAreas} onSite={onSite} hasLlm={hasLlm} hasPlaces={hasPlaces} />
         {run && <RunBanner run={run} sectionsToReview={full.length} t={t} tz={tz} />}
         {run && problems.length > 0 && <RunCard run={run} cats={cats} hasLlm={hasLlm} t={t} outcomes={outcomes} only={problems} />}
-        {full.map((m) => (
+        {full.map((m, i) => (
+          <>
+            {hasBothAreas && m.category.area !== full[i - 1]?.category.area && (
+              <h2 class="area-h label">{AREA_HEADING[m.category.area]}</h2>
+            )}
           <Section
             m={m}
             radius={radius}
@@ -242,6 +249,7 @@ export function findPlacesRoutes(deps: ResolvedAppDeps): Hono {
             removed={opts.removed === m.category.slug}
             error={opts.pickError?.categoryId === m.category.id ? opts.pickError.message : undefined}
           />
+          </>
         ))}
         {compact.length > 0 && (
           <section class="card" aria-labelledby="other-h">
@@ -251,7 +259,11 @@ export function findPlacesRoutes(deps: ResolvedAppDeps): Hono {
                 : 'Also ranked: no changes suggested'}
             </h2>
             <div class="others">
-              {compact.map((m) => (
+              {compact.map((m, i) => (
+                <>
+                {hasBothAreas && m.category.area !== compact[i - 1]?.category.area && (
+                  <p class="label area-sub">{AREA_HEADING[m.category.area]}</p>
+                )}
                 <a href={`${BASE}?show=${encodeURIComponent(m.category.slug)}#${m.category.slug}`}>
                   <span>
                     <span class="t">{m.category.name}</span>
@@ -260,6 +272,7 @@ export function findPlacesRoutes(deps: ResolvedAppDeps): Hono {
                   </span>
                   <ChevronRight />
                 </a>
+                </>
               ))}
             </div>
           </section>
@@ -381,8 +394,9 @@ export function findPlacesRoutes(deps: ResolvedAppDeps): Hono {
 }
 
 /* Category picker ------------------------------------------------------------------------------- */
-const Picker: FC<{ cats: Category[]; onSite: Map<number, number>; hasLlm: boolean; hasPlaces: boolean }> = ({
+const Picker: FC<{ cats: Category[]; grouped: boolean; onSite: Map<number, number>; hasLlm: boolean; hasPlaces: boolean }> = ({
   cats,
+  grouped,
   onSite,
   hasLlm,
   hasPlaces,
@@ -410,20 +424,32 @@ const Picker: FC<{ cats: Category[]; onSite: Map<number, number>; hasLlm: boolea
           No categories yet. <a href="/admin/categories/new">Add one on the Categories page</a>.
         </p>
       ) : (
-        <fieldset class="cats">
+        <fieldset class={grouped ? 'cat-groups' : 'cats'}>
           <legend class="sr-only">Categories to search</legend>
-          {cats.map((cat) => {
-            const n = onSite.get(cat.id) ?? 0;
-            return (
-              <label class="cat">
-                <input type="checkbox" name="category_id" value={String(cat.id)} checked />
-                <span>
-                  <span class="n">{cat.name}</span>
-                  <span class={n === 0 ? 's warn' : 's'}>
-                    {needWord(cat.hoursNeed)} · {onSiteText(n)}
+          {(grouped ? AREAS : (['all'] as const)).map((area) => {
+            const list = area === 'all' ? cats : cats.filter((cat) => cat.area === area);
+            if (list.length === 0) return null;
+            const boxes = list.map((cat) => {
+              const n = onSite.get(cat.id) ?? 0;
+              return (
+                <label class="cat">
+                  <input type="checkbox" name="category_id" value={String(cat.id)} checked />
+                  <span>
+                    <span class="n">{cat.name}</span>
+                    <span class={n === 0 ? 's warn' : 's'}>
+                      {needWord(cat.hoursNeed)} · {onSiteText(n)}
+                    </span>
                   </span>
-                </span>
-              </label>
+                </label>
+              );
+            });
+            return area === 'all' ? (
+              boxes
+            ) : (
+              <div class="cat-group">
+                <h3 class="label">{AREA_HEADING[area]}</h3>
+                <div class="cats">{boxes}</div>
+              </div>
             );
           })}
         </fieldset>

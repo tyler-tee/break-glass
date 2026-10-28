@@ -62,6 +62,9 @@ export function registerDoneStep(app: Hono, ctx: SetupContext): void {
             <p>
               <a href="/">Open the family site</a>
             </p>
+            <p>
+              <a href="/admin/house">Set up Home (optional)</a>
+            </p>
             <section class="card">
               <h2>Add it to your family's phones</h2>
               <p>

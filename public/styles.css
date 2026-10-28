@@ -3,7 +3,7 @@
    (public/family.css): Public Sans, warm background, white cards, near-black
    solid buttons, a red accent. Light only, no dark mode.
    Sections: 1 Font  2 Tokens  3 Base  4 Components  5 Tables  6 Utilities
-             7 Reduced motion  8 Shell  9 Admin pages  10 Wizard  11 Find places
+             7 Reduced motion  8 Shell  9 Admin pages  10 Wizard  11 Find places  12 House facts
    ========================================================================== */
 
 /* 1. Font (self-hosted, the same files the family pages use) ----------------- */
@@ -628,4 +628,53 @@ td.row-actions > * { display: inline-flex; vertical-align: middle; margin: 2px 8
   .savebar button { width: 100%; min-height: 52px; font-size: 17px; margin: 0 !important; }
   .others a { padding: 10px 16px; }
   .runrow { padding: 14px 16px; }
+}
+
+.cat-groups { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.cat-group h3 { margin: 0 0 8px; }
+.area-h { margin: 8px 0 -8px; }
+.area-sub { margin: 0; padding: 14px 20px 4px; }
+
+/* 12. House facts ------------------------------------------------------------------ */
+.fact-form { max-width: 36rem; }
+.fact-form .field { margin: 12px 0; }
+.fact-form .field label { margin-top: 0; }
+.fact-form [data-kinds][hidden] { display: none; }
+.seg-field { border: 0; margin: 12px 0; padding: 0; min-width: 0; }
+.seg-field legend { padding: 0; margin-bottom: 4px; font-weight: 600; }
+.seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1.5px solid var(--field-border); border-radius: 12px; overflow: hidden; background: var(--card); }
+.seg.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.seg label { position: relative; display: block; margin: 0; font-weight: 600; }
+.seg label + label { border-left: 1px solid var(--rule); }
+.seg input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.seg span { display: flex; align-items: center; justify-content: center; min-height: var(--tap); padding: 0 6px; font-size: 15px; text-align: center; color: var(--ink-2); }
+.seg input:checked + span { background: var(--solid); color: var(--on-solid); }
+.seg input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: -3px; }
+.privacy { display: flex; gap: 10px; align-items: flex-start; margin: 16px 0; padding: 10px 14px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-ink); font-size: 14px; line-height: 1.45; }
+.privacy svg { margin-top: 2px; }
+.fact-list { list-style: none; margin: 8px 0 24px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.fact { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; padding: 14px 16px; background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius-lg); }
+.fact-main { flex: 1 1 260px; min-width: 0; }
+.fact h3 { margin: 0 0 4px; font-size: 17px; }
+.fact p { margin: 2px 0; }
+.fact .sys { margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--quiet); color: var(--ink-2); font-size: 12px; font-weight: 700; vertical-align: 2px; }
+.thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.thumbs img { display: block; width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--rule); }
+.guide-list li { padding: 8px 0; border-top: 1px solid var(--divider); }
+.guide-list li:first-child { border-top: 0; }
+.photo-list { list-style: none; margin: 12px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+.photo-list li { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.photo-list img { display: block; width: 100%; max-width: 160px; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; border: 1px solid var(--rule); }
+.photo-list .cap { font-size: 13px; color: var(--ink-2); }
+.photo-list form { margin: 0; }
+.photo-pick { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.photo-btn { flex-direction: column; align-items: flex-start; height: auto; padding: 10px 14px; margin: 0; }
+.photo-btn input { margin-top: 6px; font-weight: 400; }
+/* With admin.js the file inputs hide behind their buttons; without it they stay visible and work. */
+.photo-form.js .photo-btn { flex-direction: row; align-items: center; height: auto; position: relative; overflow: hidden; }
+.photo-form.js .photo-btn input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer; border: 0; }
+.photo-form .field { margin: 12px 0; }
+.photo-form .field label { margin-top: 0; }
+@media (max-width: 480px) {
+  .seg span { font-size: 14px; padding: 0 2px; }
 }

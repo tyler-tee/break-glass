@@ -2,8 +2,12 @@ import { Hono } from 'hono';
 import { raw } from 'hono/html';
 import type { Child } from 'hono/jsx';
 import type { AppDeps } from '../../app.js';
+import { protocols } from '../../db/schema.js';
+import { eq } from 'drizzle-orm';
 import { slugify } from '../../domain/slug.js';
+import { AREAS, type Area } from '../../domain/types.js';
 import { LLM_OFF_BY_ENV, llmOf, llmOffByEnv } from '../../services/resolver.js';
+import { linkedFor } from '../house/links.js';
 import { WarningBadge } from '../../web/components/WarningBadge.js';
 import { renderMarkdown, safeHref } from '../../web/format.js';
 import { page } from '../../web/Layout.js';
@@ -44,6 +48,9 @@ const BackToSetup = () => (
     <a href="/admin/setup/protocol">Back to setup</a>
   </p>
 );
+const AREA_LABEL: Record<Area, string> = { health: 'Health', home: 'Home' };
+const areaOf = (v: unknown): Area => (v === 'home' ? 'home' : 'health');
+
 const fmt = (d: Date | null): string => (d ? d.toISOString().slice(0, 10) : '');
 
 export function protocolsAdminRoutes(deps: AppDeps): Hono {
@@ -54,7 +61,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
 
   const formPage = (
     c: Parameters<typeof page>[0],
-    v: { title: string; tags: string },
+    v: { title: string; tags: string; area: Area },
     error?: string,
   ) =>
     page(
@@ -72,6 +79,18 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
           <p>
             <label>
               Tags (comma-separated) <input name="tags" value={v.tags} />
+            </label>
+          </p>
+          <p>
+            <label>
+              Area
+              <select name="area">
+                {AREAS.map((a) => (
+                  <option value={a} selected={v.area === a}>
+                    {AREA_LABEL[a]}
+                  </option>
+                ))}
+              </select>
             </label>
           </p>
           <button type="submit">Create</button>
@@ -94,6 +113,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
     const hasLlm = llmOf(deps) !== undefined;
     const versions = listVersions(db, id);
     const latest = versions[0];
+    const links = protocol.area === 'home' ? linkedFor(db, protocol.tags) : null;
     const prefill = opts.urls ?? (latest ? listSources(db, latest.id).map((s) => s.url).join('\n') : '');
     return page(
       c,
@@ -101,6 +121,12 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
       <>
         <h1>{protocol.title}</h1>
         {opts.error && <p role="alert">{opts.error}</p>}
+        {links && (
+          <p class="muted" id="linked">
+            Linked: {links.linkedFacts.length} house {links.linkedFacts.length === 1 ? 'fact' : 'facts'}
+            {links.trades.length > 0 && ` · ${links.trades.map((t) => t.name).join(', ')}`}
+          </p>
+        )}
         <h2>Versions</h2>
         <table class="stack-table t-versions">
           <thead>
@@ -326,6 +352,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
             <tr>
               <th>Title</th>
               <th>Slug</th>
+              <th>Area</th>
               <th>Published</th>
               <th>Latest</th>
             </tr>
@@ -345,6 +372,7 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
                   )}
                 </td>
                 <td>{p.slug}</td>
+                <td>{AREA_LABEL[p.area]}</td>
                 <td>{p.publishedVersion === null ? 'none' : `v${p.publishedVersion}`}</td>
                 <td>{p.latestVersion === null ? '' : `v${p.latestVersion} ${p.latestStatus}`}</td>
               </tr>
@@ -357,18 +385,26 @@ export function protocolsAdminRoutes(deps: AppDeps): Hono {
     ),
   );
 
-  app.get('/new', (c) => formPage(c, { title: '', tags: '' }));
+  app.get('/new', (c) =>
+    formPage(c, {
+      title: str(c.req.query('title')).slice(0, 200),
+      tags: str(c.req.query('tags')).slice(0, 500),
+      area: areaOf(c.req.query('area')),
+    }),
+  );
 
   app.post('/new', async (c) => {
     const body = await c.req.parseBody();
     const title = str(body['title']).trim();
     const tagsRaw = str(body['tags']);
-    const values = { title: str(body['title']), tags: tagsRaw };
+    const area = areaOf(body['area']);
+    const values = { title: str(body['title']), tags: tagsRaw, area };
     const slug = slugify(title);
     if (slug === '') return formPage(c, values, 'Title must contain letters or numbers');
     if (getProtocolBySlug(db, slug)) return formPage(c, values, `A protocol with slug "${slug}" already exists`);
     const tags = [...new Set(tagsRaw.split(',').map((t) => t.trim()).filter((t) => t !== ''))];
-    createProtocol(db, { slug, title, tags });
+    const created = createProtocol(db, { slug, title, tags });
+    if (area !== created.area) db.update(protocols).set({ area }).where(eq(protocols.id, created.id)).run();
     return c.redirect('/admin/protocols', 302);
   });
 
